@@ -1,16 +1,34 @@
-# attendance_system
+# Attendance System
 
-A new Flutter project.
+![Attendance System Logo](path/to/logo.png)
 
-## Getting Started
+## Description
 
-This project is a starting point for a Flutter application.
+The Attendance System is a mobile application developed using **Flutter** and **Firebase** that simplifies attendance management in educational institutions. Users can log in with their registered email addresses through Firebase Authentication and are redirected to specific pages based on their roles—students or teachers.
 
-A few resources to get you started if this is your first Flutter project:
+### Key Features
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- **User Authentication:** Secure login using registered email addresses via Firebase Authentication.
+- **Role-Based Access:** Students and teachers have different interfaces tailored to their needs.
+- **QR Code Scanning:** Students can easily mark their attendance by scanning QR codes associated with their classes. This feature ensures a quick, secure, and efficient way to record attendance.
+- **Attendance Tracking for Teachers:** Teachers can view a comprehensive list of students who have attended their classes, making it easier to manage attendance records.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Screenshots
+
+Include screenshots of your application to showcase its UI and functionality.
+
+![Screenshot 1](path/to/screenshot1.png)
+![Screenshot 2](path/to/screenshot2.png)
+
+## Installation
+
+### Prerequisites
+
+- [Flutter](https://flutter.dev/docs/get-started/install) installed on your machine.
+- A Firebase project set up for authentication and database.
+
+### Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/username/repository.git
