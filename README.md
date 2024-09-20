@@ -37,3 +37,57 @@ Here are some screenshots of the application showcasing its UI and key functiona
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/username/repository.git
+
+## Installation
+
+### Prerequisites
+
+Before starting, make sure you have the following installed:
+
+- [Flutter](https://flutter.dev/docs/get-started/install) installed on your machine.
+- A Firebase project set up for authentication and database services.
+
+### Steps
+
+1. **Clone the repository:** First, clone the project repository from GitHub to your local machine:  
+   `git clone https://github.com/username/repository.git`
+
+2. **Navigate to the project directory:** Move into the project directory using the following command:  
+   `cd attendance_system`
+
+3. **Install dependencies:** Run the following command to install all necessary Flutter dependencies:  
+   `flutter pub get`
+
+4. **Set up Firebase:** You'll need to set up Firebase for authentication and database services.  
+   a. **Create a Firebase Project:** Go to [Firebase Console](https://console.firebase.google.com/), click on **Add Project**, and follow the instructions to create a new project.  
+   b. **Enable Firebase Authentication:** In your Firebase Console, navigate to **Authentication** > **Sign-in method**, and enable the **Email/Password** provider.  
+   c. **Set up Cloud Firestore:** In Firebase Console, go to **Firestore Database**, and create a new Firestore database. Start in "Test Mode" for development, but ensure you configure security rules later for production.  
+   d. **Download Firebase Configuration Files:**  
+      - **For Android:** Download the `google-services.json` file from Firebase Console and place it in the `android/app` directory of your Flutter project.  
+      - **For iOS:** Download the `GoogleService-Info.plist` file and place it in the `ios/Runner` directory.
+
+5. **Configure Firebase in Your Flutter Project:** In your `pubspec.yaml` file, ensure that the following dependencies are included:
+
+   ```yaml
+   dependencies:
+     firebase_core: latest_version
+     firebase_auth: latest_version
+     cloud_firestore: latest_version
+     qr_code_scanner: latest_version
+   
+Then run:
+flutter pub get
+
+
+6. **Run the app:** Once everything is set up, run the application on an emulator or physical device using:
+flutter run
+
+Ensure your Firebase project is correctly linked, and you can now start using the app!
+
+**Usage**
+Students: Log in and scan the class QR code to mark attendance.
+Teachers: Log in to view the list of students who have attended.
+Contributing
+If you'd like to contribute to this project, feel free to submit pull requests or report issues.
+
+
