@@ -50,7 +50,7 @@ Before starting, make sure you have the following installed:
 ### Steps
 
 1. **Clone the repository:** First, clone the project repository from GitHub to your local machine:  
-   `git clone https://github.com/username/repository.git`
+   `git clone https://github.com/natnael-kiros/attendance-system.git`
 
 2. **Navigate to the project directory:** Move into the project directory using the following command:  
    `cd attendance_system`
@@ -85,8 +85,8 @@ flutter run
 Ensure your Firebase project is correctly linked, and you can now start using the app!
 
 **Usage**
-Students: Log in and scan the class QR code to mark attendance.
-Teachers: Log in to view the list of students who have attended.
+*Students*: Log in and scan the class QR code to mark attendance.
+*Teachers*: Log in to view the list of students who have attended.
 Contributing
 If you'd like to contribute to this project, feel free to submit pull requests or report issues.
 
