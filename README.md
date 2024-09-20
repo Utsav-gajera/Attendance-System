@@ -1,6 +1,3 @@
-# Attendance System
-
-![Attendance System Logo](path/to/logo.png)
 
 ## Description
 
