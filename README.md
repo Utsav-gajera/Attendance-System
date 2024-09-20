@@ -14,8 +14,10 @@ The Attendance System is a mobile application developed using **Flutter** and **
 
 Include screenshots of your application to showcase its UI and functionality.
 
-![Screenshot 1](path/to/screenshot1.png)
-![Screenshot 2](path/to/screenshot2.png)
+![Login Page](assets/screenshot_1.png)
+![scan page](assets/screenshot_2.png)
+![Confirmation page](assets/screenshot_3.png)
+![student list page](assets/screenshot_4.png)
 
 ## Installation
 
