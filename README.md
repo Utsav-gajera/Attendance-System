@@ -8,6 +8,7 @@ The Attendance System is a mobile application developed using **Flutter** and **
 - **User Authentication:** Secure login using registered email addresses via Firebase Authentication.
 - **Role-Based Access:** Students and teachers have different interfaces tailored to their needs.
 - **QR Code Scanning:** Students can easily mark their attendance by scanning QR codes associated with their classes. This feature ensures a quick, secure, and efficient way to record attendance.
+- **QR Code Generation:** Teachers can generate QR codes for each subject, allowing students to scan them to mark their attendance. The QR codes are tied to the subject names.(u can use a script to generate qr_images based on subject name)
 - **Attendance Tracking for Teachers:** Teachers can view a comprehensive list of students who have attended their classes, making it easier to manage attendance records.
 
 
