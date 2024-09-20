@@ -84,12 +84,14 @@ flutter run
 
 Ensure your Firebase project is correctly linked, and you can now start using the app!
 
-**Usage**
+**Usage:**
 
   Students: Log in and scan the class QR code to mark attendance.
+
+  
   Teachers: Log in to view the list of students who have attended.
 
-**Contributing**
+**Contributing:**
 If you'd like to contribute to this project, feel free to submit pull requests or report issues.
 
 
