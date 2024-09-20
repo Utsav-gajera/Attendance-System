@@ -10,22 +10,20 @@ The Attendance System is a mobile application developed using **Flutter** and **
 - **QR Code Scanning:** Students can easily mark their attendance by scanning QR codes associated with their classes. This feature ensures a quick, secure, and efficient way to record attendance.
 - **Attendance Tracking for Teachers:** Teachers can view a comprehensive list of students who have attended their classes, making it easier to manage attendance records.
 
-## Screenshots
 
-Include screenshots of your application to showcase its UI and functionality.
+Here are some screenshots of the application showcasing its UI and key functionality:
 
-![Login Page](assets/screenshots/Screenshot_1.jpg)
+<table>
+  <tr>
+    <td><img src="assets/screenshots/Screenshot_1.jpg" alt="Login Page" width="300"/></td>
+    <td><img src="assets/screenshots/Screenshot_2.jpg" alt="Scan Page" width="300"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/Screenshot_3.jpg" alt="Confirmation Page" width="300"/></td>
+    <td><img src="assets/screenshots/Screenshot_4.jpg" alt="Student List Page" width="300"/></td>
+  </tr>
+</table>
 
-
-
-
-![scan page](assets/screenshots/Screenshot_2.jpg)
-
-
-
-
-![Confirmation page](assets/screenshots/Screenshot_3.jpg)
-![student list page](assets/screenshots/Screenshot_4.jpg)
 
 ## Installation
 
