@@ -37,7 +37,7 @@ Here are some screenshots of the application showcasing its UI and key functiona
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/username/repository.git
+   git clone https://github.com/natnael-kiros/attendance-system
 
 ## Installation
 
