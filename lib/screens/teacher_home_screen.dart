@@ -7,6 +7,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'attendance_list_widget.dart';
 import 'package:attendance_system/main.dart';
 import 'package:attendance_system/firebase_options.dart';
+import 'package:intl/intl.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   @override
@@ -49,46 +50,88 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Teacher Home - $_subjectName'),
-        backgroundColor: Colors.blue,
+        elevation: 0,
+        backgroundColor: Colors.teal[700],
+        foregroundColor: Colors.white,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Teacher Dashboard', 
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            Text('Subject: ${_subjectName ?? "Loading..."}', 
+                style: TextStyle(fontSize: 12, color: Colors.teal[100])),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.qr_code),
-            onPressed: () {
-              setState(() {
-                _showQRCode = !_showQRCode;
-              });
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () => _signOut(context),
+          Container(
+            margin: EdgeInsets.only(right: 8),
+            child: CircleAvatar(
+              backgroundColor: Colors.teal[100],
+              child: IconButton(
+                icon: Icon(Icons.person, color: Colors.teal[700], size: 20),
+                onPressed: () => _showProfileDialog(),
+              ),
+            ),
           ),
         ],
       ),
       body: _buildBody(context),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Students',
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.white,
+            selectedItemColor: Colors.teal[700],
+            unselectedItemColor: Colors.grey[600],
+            items: [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_outlined),
+                activeIcon: Icon(Icons.dashboard),
+                label: 'Dashboard',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.qr_code_outlined),
+                activeIcon: Icon(Icons.qr_code),
+                label: 'QR Code',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.people_outlined),
+                activeIcon: Icon(Icons.people),
+                label: 'Students',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.analytics_outlined),
+                activeIcon: Icon(Icons.analytics),
+                label: 'Analytics',
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -108,14 +151,852 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   Widget _buildBody(BuildContext context) {
     switch (_selectedIndex) {
       case 0:
-        return _buildHomeTab();
+        return _buildDashboardTab();
       case 1:
-        return _buildStudentsTab();
+        return _buildQRCodeTab();
       case 2:
-        return _buildCalendarTab();
+        return _buildStudentsTab();
+      case 3:
+        return _buildAnalyticsTab();
       default:
-        return _buildHomeTab();
+        return _buildDashboardTab();
     }
+  }
+
+  Widget _buildDashboardTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWelcomeCard(),
+          SizedBox(height: 16),
+          _buildQuickStatsGrid(),
+          SizedBox(height: 16),
+          _buildTodayClassCard(),
+          SizedBox(height: 16),
+          _buildRecentAttendanceCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.teal[400]!, Colors.teal[700]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.withOpacity(0.3),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.school, color: Colors.white, size: 24),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome Back, Teacher!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      DateFormat('EEEE, MMM d, yyyy').format(DateTime.now()),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Subject: ${_subjectName ?? "Loading..."}',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            'Ready to manage your class today?',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStatsGrid() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Overview',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Total Students',
+                Icons.people,
+                Colors.blue,
+                _buildStudentCountWidget(),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Today\'s Present',
+                Icons.check_circle,
+                Colors.green,
+                _buildTodayAttendanceWidget(),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'This Week',
+                Icons.calendar_today,
+                Colors.orange,
+                Text('5 Days', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Avg Attendance',
+                Icons.trending_up,
+                Colors.purple,
+                Text('85%', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, IconData icon, Color color, Widget valueWidget) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          SizedBox(height: 8),
+          valueWidget,
+          SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentCountWidget() {
+    if (_subjectName == null) {
+      return Text('--', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
+    }
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .where('subject', isEqualTo: _subjectName)
+          .snapshots(),
+      builder: (context, snapshot) {
+        int count = snapshot.data?.docs.length ?? 0;
+        return Text(
+          '$count',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        );
+      },
+    );
+  }
+
+  Widget _buildTodayAttendanceWidget() {
+    if (_subjectName == null) {
+      return Text('--', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
+    }
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('attendance')
+          .doc(_subjectName)
+          .collection('daily')
+          .where('date', isEqualTo: DateFormat('yyyy-MM-dd').format(DateTime.now()))
+          .snapshots(),
+      builder: (context, snapshot) {
+        int count = snapshot.data?.docs.length ?? 0;
+        return Text(
+          '$count',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        );
+      },
+    );
+  }
+
+  Widget _buildTodayClassCard() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.today, color: Colors.teal[700], size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Today\'s Class',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              Spacer(),
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _selectedIndex = 1),
+                icon: Icon(Icons.qr_code, size: 18),
+                label: Text('Generate QR'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal[700],
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.teal[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.teal[200]!),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.class_, color: Colors.teal[700], size: 24),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _subjectName ?? 'Loading...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal[800],
+                        ),
+                      ),
+                      Text(
+                        'Class Session - ${DateFormat('MMM d, yyyy').format(DateTime.now())}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentAttendanceCard() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history, color: Colors.teal[700], size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Recent Activity',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              Spacer(),
+              TextButton(
+                onPressed: () => setState(() => _selectedIndex = 3),
+                child: Text('View All'),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          _buildRecentAttendanceList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQRCodeTab() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.teal[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.teal[200]!),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.qr_code, size: 48, color: Colors.teal[700]),
+                SizedBox(height: 16),
+                Text(
+                  'QR Code Generator',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal[800],
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Generate QR code for students to scan and mark attendance',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.teal[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _showQRCode = true;
+                    });
+                  },
+                  icon: Icon(Icons.qr_code),
+                  label: Text('Generate QR Code'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal[700],
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _showQRCode = false;
+                    });
+                  },
+                  icon: Icon(Icons.clear),
+                  label: Text('Clear'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal[700],
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 20),
+          if (_showQRCode && _subjectName != null)
+            Expanded(
+              child: Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Students can scan this QR code',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Expanded(
+                      child: Center(
+                        child: QrImageView(
+                          data: _subjectName!,
+                          version: QrVersions.auto,
+                          size: 250.0,
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.teal[700],
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Subject: $_subjectName',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.teal[800],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Attendance Analytics',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 16),
+          _buildAttendanceChart(),
+          SizedBox(height: 16),
+          _buildStudentPerformance(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceChart() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Weekly Attendance Trend',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 20),
+          Container(
+            height: 200,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.bar_chart, size: 48, color: Colors.grey[400]),
+                  SizedBox(height: 8),
+                  Text(
+                    'Chart visualization would go here',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentPerformance() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Student Performance',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 16),
+          _buildStudentPerformanceList(),
+        ],
+      ),
+    );
+  }
+
+  void _showProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.person, color: Colors.teal[700]),
+              SizedBox(width: 8),
+              Text('Teacher Profile'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Subject: ${_subjectName ?? "Not assigned"}'),
+              SizedBox(height: 8),
+              Text('Email: ${FirebaseAuth.instance.currentUser?.email ?? "Not available"}'),
+              SizedBox(height: 8),
+              Text('Role: Teacher'),
+              SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _signOut(context);
+                  },
+                  icon: Icon(Icons.logout),
+                  label: Text('Sign Out'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRecentAttendanceList() {
+    if (_subjectName == null) {
+      return Container(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No subject assigned',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('attendance')
+          .doc(_subjectName)
+          .collection('daily')
+          .orderBy('timestamp', descending: true)
+          .limit(5)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'No attendance records yet',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          );
+        }
+        
+        return Column(
+          children: snapshot.data!.docs.take(3).map((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            return Container(
+              margin: EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green[600], size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data['studentName'] ?? 'Unknown Student',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green[800],
+                          ),
+                        ),
+                        Text(
+                          data['date'] ?? 'Unknown date',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    'Present',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildStudentPerformanceList() {
+    if (_subjectName == null) {
+      return Container(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No subject assigned',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .where('subject', isEqualTo: _subjectName)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'No students enrolled',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          );
+        }
+        
+        return Column(
+          children: snapshot.data!.docs.take(5).map((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            String studentName = data['name'] ?? data['email']?.split('@')[0] ?? 'Unknown';
+            
+            return Container(
+              margin: EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.blue[100],
+                    child: Icon(Icons.person, color: Colors.blue[600], size: 16),
+                    radius: 16,
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          studentName,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue[800],
+                          ),
+                        ),
+                        Text(
+                          data['email'] ?? 'No email',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '85%', // Sample attendance rate
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green[800],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
   }
 
   Widget _buildHomeTab() {
