@@ -5,6 +5,10 @@ import 'firebase_options.dart';
 import 'screens/teacher_home_screen.dart';
 import 'screens/student_home_screen.dart';
 import 'screens/admin_home_screen.dart';
+import 'utils/error_handler.dart';
+import 'utils/validators.dart';
+import 'services/offline_service.dart';
+import 'services/accessibility_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,18 +28,31 @@ void main() async {
     }
   }
 
+  // Initialize services
+  try {
+    await OfflineService().initialize();
+    await AccessibilityService().initialize();
+  } catch (e) {
+    print('Service initialization error: $e');
+  }
+
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  final AccessibilityService _accessibilityService = AccessibilityService();
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Attendance System',
-      theme: ThemeData(
+      theme: _accessibilityService.getAccessibleTheme(ThemeData(
         primarySwatch: Colors.blue,
+        useMaterial3: true,
+      )),
+      home: ConnectionStatusWidget(
+        child: AuthWrapper(),
       ),
-      home: AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -109,6 +126,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   // Firebase Authentication instance
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -116,11 +134,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<void> _signIn() async {
-    if (_isLoading) return;
-    
-    // Validate input
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
-      _showError('Please fill in all fields.');
+    if (_isLoading || !FormValidator.validateForm(_formKey)) {
       return;
     }
     
@@ -128,75 +142,28 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = true;
     });
 
-    try {
-      final String email = _emailController.text.trim().toLowerCase();
-      final String password = _passwordController.text;
-      
-      // Validate email format
-      if (!email.endsWith('@admin.com') && 
-          !email.endsWith('@teacher.com') && 
-          !email.endsWith('@student.com')) {
-        _showError('Please use a valid admin, teacher, or student email address.');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-      
-      await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
-      print('Successfully signed in: $email');
-      // Navigation will be handled by AuthWrapper automatically
-      
-    } catch (e) {
-      print('Error signing in: $e');
-      String errorMessage = 'Invalid email or password. Please try again.';
-      
-      if (e.toString().contains('user-not-found')) {
-        errorMessage = 'No account found with this email address.';
-      } else if (e.toString().contains('wrong-password')) {
-        errorMessage = 'Incorrect password. Please try again.';
-      } else if (e.toString().contains('invalid-email')) {
-        errorMessage = 'Invalid email format.';
-      } else if (e.toString().contains('too-many-requests')) {
-        errorMessage = 'Too many failed attempts. Please try again later.';
-      }
-      
-      _showError(errorMessage);
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: Colors.red,
-      ),
+    await ErrorHandler.handleAsyncOperation(
+      context,
+      () async {
+        final String email = Validators.sanitizeEmail(_emailController.text);
+        final String password = _passwordController.text;
+        
+        await _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        print('Successfully signed in: $email');
+      },
+      loadingMessage: 'Signing in...',
     );
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -244,86 +211,59 @@ class _LoginPageState extends State<LoginPage> {
               ),
               SizedBox(height: 48),
               // Login Form
-              Container(
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Email Address',
-                        hintText: 'user@student.com, user@teacher.com, admin@admin.com',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
-                        ),
+              LoadingOverlay(
+                isLoading: _isLoading,
+                message: 'Signing in...',
+                child: Container(
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
                       ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    SizedBox(height: 20),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outline),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    ],
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        AccessibleTextField(
+                          labelText: 'Email Address',
+                          hintText: 'user@student.com, user@teacher.com, admin@admin.com',
+                          controller: _emailController,
+                          validator: Validators.validateEmail,
+                          keyboardType: TextInputType.emailAddress,
+                          prefixIcon: Icons.email_outlined,
+                          semanticLabel: 'Email address field',
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
+                        SizedBox(height: 20),
+                        AccessibleTextField(
+                          labelText: 'Password',
+                          controller: _passwordController,
+                          validator: Validators.validatePassword,
+                          obscureText: true,
+                          prefixIcon: Icons.lock_outline,
+                          semanticLabel: 'Password field',
                         ),
-                      ),
-                    ),
-                    SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _signIn,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue[700],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: AccessibleButton(
+                            text: 'Login',
+                            onPressed: _isLoading ? null : _signIn,
+                            backgroundColor: Colors.blue[700],
+                            semanticLabel: 'Login button',
+                            tooltip: 'Sign in to your account',
                           ),
-                          elevation: 2,
                         ),
-                        child: _isLoading 
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              'Login',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
               SizedBox(height: 32),
