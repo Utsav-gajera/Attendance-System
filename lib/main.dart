@@ -202,9 +202,9 @@ class _LoginPageState extends State<LoginPage> {
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(16.0),
           child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
             Icon(
               Icons.school,
               size: 100,
@@ -314,6 +314,7 @@ class _LoginPageState extends State<LoginPage> {
           ],
         ),
       ),
+    ),
     );
   }
 }
