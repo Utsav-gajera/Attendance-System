@@ -1,12 +1,12 @@
 package com.example.attendance_system;
 
 import io.flutter.app.FlutterApplication;
-import io.flutter.view.FlutterMain;
+import io.flutter.FlutterInjector;
 
 public class FlutterMultiDexApplication extends FlutterApplication {
     @Override
     public void onCreate() {
         super.onCreate();
-        FlutterMain.startInitialization(this);
+        FlutterInjector.instance().flutterLoader().startInitialization(this);
     }
 }

@@ -26,6 +26,16 @@ class AttendanceListWidget extends StatelessWidget {
           return Text('Error: ${snapshot.error}');
         }
 
+        // Check if document exists before accessing fields
+        if (!snapshot.data!.exists) {
+          return Center(
+            child: Text(
+              'No attendance data found for $subjectName',
+              style: TextStyle(fontSize: 16.0, color: Colors.grey),
+            ),
+          );
+        }
+
         List<dynamic>? students =
             snapshot.data?.get('students') as List<dynamic>?;
 

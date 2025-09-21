@@ -54,11 +54,11 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAYTURUg_a_H81crkKrgvGtHxSK_5_JpUk',
-    appId: '1:780900514083:android:2f52b457c5ea7b50873496',
-    messagingSenderId: '780900514083',
-    projectId: 'attendance-system-91e45',
-    storageBucket: 'attendance-system-91e45.appspot.com',
+    apiKey: 'AIzaSyCB99lUbn24yLZubuah5FXEQxv4DzYQdBI',
+    appId: '1:826805641620:android:6172ead1a2e25dea4eaf81',
+    messagingSenderId: '826805641620',
+    projectId: 'attendance-system-4a4a3',
+    storageBucket: 'attendance-system-4a4a3.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

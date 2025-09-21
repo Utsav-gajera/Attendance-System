@@ -1,19 +1,9 @@
-buildscript {
-    repositories {
-        google()
-        jcenter()
-    }
-
-    dependencies {
-        classpath 'com.android.tools.build:gradle:4.2.0' // Update to the latest version
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.31' // Use the latest version
-    }
-}
-
 plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
+    id 'com.google.gms.google-services'
+
 }
 
 def localProperties = new Properties()
@@ -34,24 +24,21 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
-allprojects {
-    repositories {
-        google()
-        jcenter()
-    }
-}
 
 android {
-    compileSdkVersion 33
+    namespace "com.example.attendance_system"
+
+    compileSdkVersion 36
     ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
     sourceSets {
@@ -60,8 +47,8 @@ android {
 
     defaultConfig {
         applicationId "com.example.attendance_system"
-        minSdkVersion 20
-        targetSdkVersion 30
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true // Enable Multidex support
@@ -75,7 +62,10 @@ android {
 }
 
 dependencies {
-    implementation 'com.android.support:multidex:1.0.3' // Add Multidex dependency
+    implementation 'androidx.multidex:multidex:2.0.1' // AndroidX Multidex
+    // FlutterFire plugins pull in their required Firebase SDKs automatically.
+    // Do not add native Firebase dependencies manually here in Flutter apps.
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.2'
 }
 
 flutter {
