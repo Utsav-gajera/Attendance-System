@@ -8,6 +8,8 @@ import 'attendance_list_widget.dart';
 import 'package:attendance_system/main.dart';
 import 'package:attendance_system/firebase_options.dart';
 import 'package:intl/intl.dart';
+import '../services/attendance_service.dart';
+import '../services/enrollment_service.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   @override
@@ -16,8 +18,11 @@ class TeacherHomeScreen extends StatefulWidget {
 
 class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   String? _subjectName;
+  String? _subjectCode;
   String? _teacherName;
   bool _showQRCode = false;
+  Map<String, String>? _qrData;
+  bool _isGeneratingQR = false;
   int _selectedIndex = 0;
   final TextEditingController _studentEmailController = TextEditingController();
   final TextEditingController _studentPasswordController = TextEditingController();
@@ -47,10 +52,40 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         
         if (teacherDoc.exists) {
           Map<String, dynamic> data = teacherDoc.data() as Map<String, dynamic>;
-          setState(() {
-            _subjectName = data['subject'] ?? 'Unknown Subject';
-            _teacherName = data['fullName'] ?? 'Unknown Teacher';
-          });
+          // Start with what is available
+          String? subjectDisplay = data['subject'];
+          String? teacherFullName = data['fullName'] ?? 'Unknown Teacher';
+
+          // Resolve subjectCode and canonical subject name from subjects collection
+          try {
+            final subjectsSnap = await _firestore
+                .collection('subjects')
+                .where('teacherEmail', isEqualTo: teacherEmail)
+                .limit(1)
+                .get();
+            if (subjectsSnap.docs.isNotEmpty) {
+              final first = subjectsSnap.docs.first;
+              final subjData = first.data();
+              setState(() {
+                _subjectCode = first.id; // canon code for queries and QR
+                _subjectName = subjData['name'] ?? subjectDisplay ?? first.id; // display name
+                _teacherName = teacherFullName;
+              });
+            } else {
+              setState(() {
+                _subjectCode = subjectDisplay; // fallback, likely wrong but better than null
+                _subjectName = subjectDisplay ?? 'Unknown Subject';
+                _teacherName = teacherFullName;
+              });
+            }
+          } catch (e) {
+            print('Error resolving subject code: $e');
+            setState(() {
+              _subjectCode = subjectDisplay;
+              _subjectName = subjectDisplay ?? 'Unknown Subject';
+              _teacherName = teacherFullName;
+            });
+          }
         } else {
           print('Teacher document not found for email: $teacherEmail');
           setState(() {
@@ -322,16 +357,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                 'This Week',
                 Icons.calendar_today,
                 Colors.orange,
-                Text('5 Days', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'Avg Attendance',
-                Icons.trending_up,
-                Colors.purple,
-                Text('85%', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                _buildThisWeekWidget(),
               ),
             ),
           ],
@@ -381,15 +407,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Widget _buildStudentCountWidget() {
-    if (_subjectName == null) {
+    if (_subjectCode == null) {
       return Text('--', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
     }
-    
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('students')
-          .where('subject', isEqualTo: _subjectName)
-          .snapshots(),
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: EnrollmentService.subjectRosterStream(_subjectCode!),
       builder: (context, snapshot) {
         int count = snapshot.data?.docs.length ?? 0;
         return Text(
@@ -405,17 +428,43 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       return Text('--', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
     }
     
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .doc(_subjectName)
-          .collection('daily')
-          .where('date', isEqualTo: DateFormat('yyyy-MM-dd').format(DateTime.now()))
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: AttendanceService.getSubjectAttendance(
+        teacherEmail: FirebaseAuth.instance.currentUser?.email,
+        subjectCode: _subjectCode,
+        date: DateTime.now(),
+      ),
       builder: (context, snapshot) {
-        int count = snapshot.data?.docs.length ?? 0;
+        int count = snapshot.data?.length ?? 0;
         return Text(
           '$count',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        );
+      },
+    );
+  }
+
+  Widget _buildThisWeekWidget() {
+    if (_subjectCode == null) {
+      return Text('--', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
+    }
+
+    final start = DateTime.now().subtract(Duration(days: 6));
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: AttendanceService.getSubjectAttendance(
+        subjectCode: _subjectCode,
+        startDate: start,
+        endDate: DateTime.now(),
+      ),
+      builder: (context, snapshot) {
+        final records = snapshot.data ?? [];
+        final uniqueDays = <String>{};
+        for (final r in records) {
+          final d = r['date'];
+          if (d is String) uniqueDays.add(d);
+        }
+        return Text(
+          '${uniqueDays.length} Days',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         );
       },
@@ -593,13 +642,15 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _showQRCode = true;
-                    });
-                  },
-                  icon: Icon(Icons.qr_code),
-                  label: Text('Generate QR Code'),
+                  onPressed: _isGeneratingQR ? null : _generateQRCode,
+                  icon: _isGeneratingQR 
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Icon(Icons.qr_code),
+                  label: Text(_isGeneratingQR ? 'Generating...' : 'Generate QR Code'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[700],
                     foregroundColor: Colors.white,
@@ -613,6 +664,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                   onPressed: () {
                     setState(() {
                       _showQRCode = false;
+                      _qrData = null;
                     });
                   },
                   icon: Icon(Icons.clear),
@@ -626,7 +678,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             ],
           ),
           SizedBox(height: 20),
-          if (_showQRCode && _subjectName != null)
+          if (_showQRCode && _qrData != null)
             Expanded(
               child: Container(
                 padding: EdgeInsets.all(20),
@@ -655,7 +707,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                     Expanded(
                       child: Center(
                         child: QrImageView(
-                          data: _subjectName!,
+                          data: _qrData!['qrCode']!,
                           version: QrVersions.auto,
                           size: 250.0,
                           backgroundColor: Colors.white,
@@ -670,13 +722,41 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                         color: Colors.teal[50],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        'Subject: $_subjectName',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.teal[800],
-                        ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Subject: ${_qrData!['subject']}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.teal[800],
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Teacher: ${_qrData!['teacherName']}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.teal[600],
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Valid for 2 hours',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[800],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -712,6 +792,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Widget _buildAttendanceChart() {
+    final start = DateTime.now().subtract(Duration(days: 6));
+    final end = DateTime.now();
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -737,22 +820,66 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
               color: Colors.grey[800],
             ),
           ),
-          SizedBox(height: 20),
-          Container(
-            height: 200,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.bar_chart, size: 48, color: Colors.grey[400]),
-                  SizedBox(height: 8),
-                  Text(
-                    'Chart visualization would go here',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
+          SizedBox(height: 12),
+          FutureBuilder<List<Map<String, dynamic>>>(
+      future: AttendanceService.getSubjectAttendance(
+              subjectCode: _subjectCode,
+              startDate: start,
+              endDate: end,
             ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(height: 120, child: Center(child: CircularProgressIndicator()));
+              }
+
+              final records = snapshot.data ?? [];
+              if (records.isEmpty) {
+                return Container(
+                  height: 120,
+                  child: Center(
+                    child: Text('No attendance in the last 7 days', style: TextStyle(color: Colors.grey[600])),
+                  ),
+                );
+              }
+
+              // Count per day
+              final counts = <String, int>{};
+              for (int i = 0; i < 7; i++) {
+                final d = DateTime(start.year, start.month, start.day + i);
+                final key = DateFormat('MMM d').format(d);
+                counts[key] = 0;
+              }
+              for (final r in records) {
+                final dateStr = r['date'] as String?;
+                if (dateStr != null) {
+                  final d = DateTime.parse(dateStr);
+                  final key = DateFormat('MMM d').format(d);
+                  if (counts.containsKey(key)) counts[key] = (counts[key] ?? 0) + 1;
+                }
+              }
+
+              return Column(
+                children: counts.entries.map((e) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 80, child: Text(e.key, style: TextStyle(color: Colors.grey[700]))),
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            value: (e.value) / (records.length == 0 ? 1 : records.length),
+                            backgroundColor: Colors.grey[200],
+                            valueColor: AlwaysStoppedAnimation(Colors.teal[400]!),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('${e.value}', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
         ],
       ),
@@ -855,16 +982,15 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       );
     }
     
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .doc(_subjectName)
-          .collection('daily')
-          .orderBy('timestamp', descending: true)
-          .limit(5)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: AttendanceService.getSubjectAttendance(
+        teacherEmail: FirebaseAuth.instance.currentUser?.email,
+        subjectCode: _subjectCode,
+        startDate: DateTime.now().subtract(Duration(days: 7)),
+        endDate: DateTime.now(),
+      ),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Container(
             padding: EdgeInsets.all(16),
             child: Text(
@@ -875,8 +1001,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         }
         
         return Column(
-          children: snapshot.data!.docs.take(3).map((doc) {
-            var data = doc.data() as Map<String, dynamic>;
+          children: snapshot.data!.take(3).map((data) {
             return Container(
               margin: EdgeInsets.only(bottom: 8),
               padding: EdgeInsets.all(12),
@@ -902,7 +1027,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                           ),
                         ),
                         Text(
-                          data['date'] ?? 'Unknown date',
+                          '${data['date']} at ${data['time']}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -939,11 +1064,10 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       );
     }
     
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('students')
-          .where('subject', isEqualTo: _subjectName)
-          .snapshots(),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _subjectCode == null
+          ? const Stream.empty()
+          : EnrollmentService.subjectRosterStream(_subjectCode!),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
@@ -954,12 +1078,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             ),
           );
         }
-        
+
         return Column(
           children: snapshot.data!.docs.take(5).map((doc) {
-            var data = doc.data() as Map<String, dynamic>;
-            String studentName = data['fullName'] ?? data['name'] ?? data['email']?.split('@')[0] ?? 'Unknown Student';
-            
+            final data = doc.data();
+            final studentName = data['studentName'] ?? 'Unknown Student';
+            final email = data['studentEmail'] ?? 'no-email';
+
             return Container(
               margin: EdgeInsets.only(bottom: 8),
               padding: EdgeInsets.all(12),
@@ -989,7 +1114,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                           ),
                         ),
                         Text(
-                          data['email'] ?? 'No email',
+                          email,
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -1005,7 +1130,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '85%', // Sample attendance rate
+                      '—', // Placeholder for attendance rate
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.green[800],
@@ -1162,7 +1287,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           ),
           SizedBox(height: 15),
           QrImageView(
-            data: _subjectName!,
+            data: _subjectCode ?? _subjectName ?? '',
             version: QrVersions.auto,
             size: 200.0,
             backgroundColor: Colors.white,
@@ -1182,13 +1307,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Widget _buildAttendanceList(BuildContext context) {
-    if (_subjectName == null) {
+    if (_subjectCode == null) {
       return Center(
-        child: Text('Subject name not found.'),
+        child: Text('Subject not found.'),
       );
     }
 
-    return AttendanceListWidget(subjectName: _subjectName!);
+    return AttendanceListWidget(subjectCode: _subjectCode!);
   }
 
   Widget _buildAddStudentSection() {
@@ -1268,41 +1393,40 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
               ),
             ),
             SizedBox(height: 16),
-            StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('students')
-                  .where('subject', isEqualTo: _subjectName)
-                  .snapshots(),
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _subjectCode == null
+                  ? const Stream.empty()
+                  : EnrollmentService.subjectRosterStream(_subjectCode!),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
                 }
-                
+
                 if (snapshot.hasError) {
                   return Text('Error: ${snapshot.error}');
                 }
-                
+
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Text('No students found');
                 }
-                
+
                 return ListView.builder(
                   shrinkWrap: true,
                   physics: NeverScrollableScrollPhysics(),
                   itemCount: snapshot.data!.docs.length,
                   itemBuilder: (context, index) {
-                    var student = snapshot.data!.docs[index];
-                    var data = student.data() as Map<String, dynamic>;
-                    
-                    String fullName = data['fullName'] ?? data['name'] ?? 'Unknown Student';
-                    
+                    final doc = snapshot.data!.docs[index];
+                    final data = doc.data();
+                    final fullName = data['studentName'] ?? 'Unknown Student';
+                    final email = data['studentEmail'] ?? 'no-email';
+
                     return Card(
                       margin: EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.teal[100],
                           child: Text(
-                            fullName.substring(0, 1).toUpperCase(),
+                            (fullName.isNotEmpty ? fullName[0] : '?').toUpperCase(),
                             style: TextStyle(
                               color: Colors.teal[700],
                               fontWeight: FontWeight.bold,
@@ -1314,12 +1438,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
-                          'Email: ${data['email'] ?? 'No email'}',
+                          'Email: $email',
                           style: TextStyle(fontSize: 12),
                         ),
                         trailing: IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteStudent(student.id, data['email']),
+                          icon: Icon(Icons.remove_circle, color: Colors.red),
+                          onPressed: () => _removeStudentFromCurrentSubject(email),
                         ),
                       ),
                     );
@@ -1351,8 +1475,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             StreamBuilder<QuerySnapshot>(
               stream: _firestore
                   .collection('attendance')
-                  .doc(_subjectName)
-                  .collection('daily')
+                  .doc(_subjectCode)
+                  .collection('records')
                   .where('date', isEqualTo: _formatDate(_selectedDay!))
                   .snapshots(),
               builder: (context, snapshot) {
@@ -1402,10 +1526,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Future<void> _addStudent() async {
-    if (_studentNameController.text.isEmpty ||
-        _studentEmailController.text.isEmpty ||
-        _studentPasswordController.text.isEmpty) {
-      _showError('Please fill all fields');
+    // Basic validations: name and email required; password optional for existing students
+    if (_studentNameController.text.isEmpty || _studentEmailController.text.isEmpty) {
+      _showError('Please fill name and email');
       return;
     }
 
@@ -1416,60 +1539,92 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
     final String studentEmail = _studentEmailController.text.trim().toLowerCase();
     final String studentPassword = _studentPasswordController.text.trim();
-    if (studentPassword.length < 6) {
+
+    if (studentPassword.isNotEmpty && studentPassword.length < 6) {
       _showError('Password must be at least 6 characters');
       return;
     }
 
     try {
-      // Use a secondary Firebase app so the teacher session is not replaced
-      FirebaseApp secondaryApp;
-      try {
-        secondaryApp = Firebase.app('teacher_worker');
-      } catch (_) {
-        secondaryApp = await Firebase.initializeApp(
-          name: 'teacher_worker',
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
+      if (_subjectCode == null || _subjectName == null) {
+        _showError('Subject not loaded yet');
+        return;
       }
 
-      final FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      // Ensure teacher identity
+      final teacherEmail = FirebaseAuth.instance.currentUser?.email;
+      if (teacherEmail == null) {
+        _showError('Teacher not authenticated');
+        return;
+      }
 
-      // Try to create the student auth user
-      try {
-        await secondaryAuth.createUserWithEmailAndPassword(
-          email: studentEmail,
-          password: studentPassword,
-        );
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-          _showError('Email already in use. Ask the student to reset password or choose another email.');
-          return;
-        } else {
-          rethrow;
+      // Determine if student document already exists
+      final studentDoc = await _firestore.collection('students').doc(studentEmail).get();
+      final bool studentExists = studentDoc.exists;
+
+      bool createdAuthUser = false;
+
+      // Create auth user only when password provided and account likely not present
+      if (studentPassword.isNotEmpty && !studentExists) {
+        FirebaseApp secondaryApp;
+        try {
+          secondaryApp = Firebase.app('teacher_worker');
+        } catch (_) {
+          secondaryApp = await Firebase.initializeApp(
+            name: 'teacher_worker',
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
         }
+        final FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+        try {
+          await secondaryAuth.createUserWithEmailAndPassword(
+            email: studentEmail,
+            password: studentPassword,
+          );
+          createdAuthUser = true;
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'email-already-in-use') {
+            // OK: proceed with enrollment
+            createdAuthUser = false;
+          } else {
+            rethrow;
+          }
+        }
+      } else if (!studentExists && studentPassword.isEmpty) {
+        // No account and no password - ask teacher to provide password
+        _showError('Student account not found. Provide a password to create a new account.');
+        return;
       }
 
-      // Only write Firestore if Auth user was created successfully
+      // Upsert student base doc without single-subject field and enroll them
       await _firestore.collection('students').doc(studentEmail).set({
         'fullName': _studentNameController.text,
-        'name': _studentNameController.text, // Keep for backward compatibility
+        'name': _studentNameController.text, // backward compatibility
         'email': studentEmail,
-        'subject': _subjectName,
+        'subjects': FieldValue.arrayUnion([_subjectCode]),
         'createdAt': FieldValue.serverTimestamp(),
-        'authPassword': studentPassword, // Store temporarily for auth deletion (not secure for production)
+        if (createdAuthUser) 'authPassword': studentPassword, // legacy field
       }, SetOptions(merge: true));
 
-      _showSuccess('Student added successfully!');
-      
+      await EnrollmentService.enrollStudentToSubject(
+        studentEmail: studentEmail,
+        studentName: _studentNameController.text,
+        subjectCode: _subjectCode!,
+        subjectName: _subjectName!,
+        teacherEmail: teacherEmail,
+        teacherName: _teacherName ?? 'Teacher',
+      );
+
+      _showSuccess('Student enrolled to $_subjectName successfully!');
+
       // Clear form
       _studentNameController.clear();
       _studentEmailController.clear();
       _studentPasswordController.clear();
-      
+
     } catch (e) {
-      print('Error adding student: $e');
-      _showError('Failed to add student: ${e.toString()}');
+      print('Error adding/enrolling student: $e');
+      _showError('Failed to enroll student: ${e.toString()}');
     }
   }
 
@@ -1559,6 +1714,38 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     }
   }
 
+  Future<void> _removeStudentFromCurrentSubject(String studentEmail) async {
+    if (_subjectCode == null) {
+      _showError('Subject not loaded');
+      return;
+    }
+
+    // Confirm removal
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove from Subject'),
+        content: Text('Remove this student from $_subjectName?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Remove')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await EnrollmentService.removeStudentFromSubject(
+        studentEmail: studentEmail,
+        subjectCode: _subjectCode!,
+      );
+      _showSuccess('Student removed from $_subjectName');
+    } catch (e) {
+      _showError('Failed to remove: ${e.toString()}');
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1575,5 +1762,43 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         backgroundColor: Colors.green,
       ),
     );
+  }
+  
+  Future<void> _generateQRCode() async {
+    if (_subjectCode == null) {
+      _showError('Subject not loaded yet');
+      return;
+    }
+    
+    final teacherEmail = FirebaseAuth.instance.currentUser?.email;
+    if (teacherEmail == null) {
+      _showError('Teacher not authenticated');
+      return;
+    }
+    
+    setState(() {
+      _isGeneratingQR = true;
+    });
+    
+    try {
+      final qrData = await AttendanceService.generateQRCodeData(
+        teacherEmail: teacherEmail,
+        subjectCode: _subjectCode!,
+      );
+      
+      setState(() {
+        _qrData = qrData;
+        _showQRCode = true;
+        _isGeneratingQR = false;
+      });
+      
+      _showSuccess('QR code generated successfully! Valid for 2 hours.');
+      
+    } catch (e) {
+      setState(() {
+        _isGeneratingQR = false;
+      });
+      _showError('Failed to generate QR code: ${e.toString()}');
+    }
   }
 }

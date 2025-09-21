@@ -18,7 +18,7 @@ class OfflineService {
   final Connectivity _connectivity = Connectivity();
   
   bool _isOnline = true;
-  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final StreamController<bool> _connectionStatusController = StreamController<bool>.broadcast();
 
   // Offline data storage
@@ -52,9 +52,9 @@ class OfflineService {
     _onConnectivityChanged(result);
   }
 
-  void _onConnectivityChanged(ConnectivityResult result) {
+  void _onConnectivityChanged(List<ConnectivityResult> result) {
     final wasOnline = _isOnline;
-    _isOnline = result != ConnectivityResult.none;
+    _isOnline = !result.contains(ConnectivityResult.none);
     
     _connectionStatusController.add(_isOnline);
 

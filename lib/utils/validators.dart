@@ -133,7 +133,7 @@ class Validators {
     
     String pattern = r'^[a-zA-Z\s';
     if (allowNumbers) pattern += r'0-9';
-    if (allowSpecialChars) pattern += r'\-\'\.\(\)';
+    if (allowSpecialChars) pattern += r"\-\'\(\)\.";
     pattern += r']+$';
     
     if (!RegExp(pattern).hasMatch(trimmed)) {
@@ -151,7 +151,7 @@ class Validators {
     return input
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ') // Replace multiple spaces with single space
-        .replaceAll(RegExp(r'[^\w\s\-\'\.\(\)]'), ''); // Remove unwanted characters
+        .replaceAll(RegExp(r"[^\w\s\-\'\(\)\.]"), ''); // Remove unwanted characters
   }
 
   // Sanitize email

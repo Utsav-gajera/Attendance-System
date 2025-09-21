@@ -78,7 +78,6 @@ class AccessibilityService {
     return ThemeData(
       primarySwatch: Colors.blue,
       brightness: Brightness.dark,
-      backgroundColor: Colors.black,
       scaffoldBackgroundColor: Colors.black,
       cardColor: Colors.grey[900],
       dividerColor: Colors.white,

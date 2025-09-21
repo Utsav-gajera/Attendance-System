@@ -270,7 +270,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 'Today\'s Attendance',
                 Icons.check_circle,
                 Colors.green,
-                Text('125', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                _buildTodaysAttendanceCountWidget(),
               ),
             ),
           ],
@@ -981,8 +981,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Widget _buildRecentActivityList() {
+    // Use collection group query to read from attendance/{subject}/records
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('attendance').orderBy('timestamp', descending: true).limit(5).snapshots(),
+      stream: _firestore
+          .collectionGroup('records')
+          .orderBy('timestamp', descending: true)
+          .limit(5)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -1062,6 +1067,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
             );
           }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildTodaysAttendanceCountWidget() {
+    final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collectionGroup('records')
+          .where('date', isEqualTo: today)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        return Text(
+          '$count',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         );
       },
     );
@@ -1237,14 +1259,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Widget _buildTodayAttendanceReport() {
+    final startOfToday = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
-          .collection('attendance')
-          .where('timestamp', isGreaterThan: DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-            DateTime.now().day,
-          ))
+          .collectionGroup('records')
+          .where('timestamp', isGreaterThan: startOfToday)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1334,7 +1357,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   ),
                   StreamBuilder<QuerySnapshot>(
                     stream: _firestore
-                        .collection('attendance')
+                        .collectionGroup('records')
                         .where('subject', isEqualTo: entry.key)
                         .where('timestamp', isGreaterThan: DateTime(
                           DateTime.now().year,

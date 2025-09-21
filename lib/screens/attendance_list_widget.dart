@@ -2,42 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AttendanceListWidget extends StatelessWidget {
-  final String subjectName;
+  final String subjectCode;
 
-  AttendanceListWidget({required this.subjectName});
+  AttendanceListWidget({required this.subjectCode});
 
   @override
   Widget build(BuildContext context) {
     DateTime currentDate = DateTime.now();
+    final String today = _formatDate(currentDate);
 
-    return StreamBuilder(
-      stream: FirebaseFirestore.instance
-          .collection('attendance')
-          .doc(subjectName.toLowerCase())
-          .snapshots(),
-      builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
+    // Stream today's attendance records from the new structure:
+    // attendance/{subjectCode}/records where date == today
+    final Stream<QuerySnapshot> attendanceStream = FirebaseFirestore.instance
+        .collection('attendance')
+        .doc(subjectCode)
+        .collection('records')
+        .where('date', isEqualTo: today)
+        .orderBy('timestamp', descending: false)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: attendanceStream,
+      builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(),
-          );
+          return Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
-          return Text('Error: ${snapshot.error}');
+          return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        // Check if document exists before accessing fields
-        if (!snapshot.data!.exists) {
+        final docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
           return Center(
             child: Text(
-              'No attendance data found for $subjectName',
+              'No attendance recorded for $subjectCode on $today',
               style: TextStyle(fontSize: 16.0, color: Colors.grey),
             ),
           );
         }
-
-        List<dynamic>? students =
-            snapshot.data?.get('students') as List<dynamic>?;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,7 +49,7 @@ class AttendanceListWidget extends StatelessWidget {
             Padding(
               padding: EdgeInsets.all(4.0),
               child: Text(
-                'Attended Students for $subjectName',
+                'Attended Students for $subjectCode',
                 style: TextStyle(
                   fontSize: 18.0,
                   fontWeight: FontWeight.bold,
@@ -55,7 +59,7 @@ class AttendanceListWidget extends StatelessWidget {
             Padding(
               padding: EdgeInsets.all(4.0),
               child: Text(
-                'Date: ${_formatDate(currentDate)}',
+                'Date: $today',
                 style: TextStyle(
                   fontSize: 14.0,
                   color: Colors.grey,
@@ -64,8 +68,11 @@ class AttendanceListWidget extends StatelessWidget {
             ),
             Expanded(
               child: ListView.builder(
-                itemCount: students?.length ?? 0,
+                itemCount: docs.length,
                 itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final studentName = data['studentName'] ?? data['studentEmail'] ?? 'Unknown Student';
+                  final time = data['time'] ?? '';
                   return Container(
                     margin: EdgeInsets.only(bottom: 4.0),
                     child: ListTile(
@@ -76,11 +83,10 @@ class AttendanceListWidget extends StatelessWidget {
                         horizontal: 8.0,
                       ),
                       title: Text(
-                        '${index + 1}. ${students?[index] ?? ''}',
-                        style: TextStyle(
-                          fontSize: 16.0,
-                        ),
+                        '${index + 1}. $studentName',
+                        style: TextStyle(fontSize: 16.0),
                       ),
+                      subtitle: time.isNotEmpty ? Text('Time: $time') : null,
                     ),
                   );
                 },

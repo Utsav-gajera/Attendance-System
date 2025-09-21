@@ -201,7 +201,7 @@ class AttendanceBarChart extends StatelessWidget {
                   maxY: (data.map((e) => e.count).reduce((a, b) => a > b ? a : b) + 5).toDouble(),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
-                      tooltipBgColor: Colors.blueGrey,
+                      getTooltipColor: (group) => Colors.blueGrey,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
                           '${data[group.x.toInt()].week}\n${rod.toY.round()}',
@@ -424,7 +424,7 @@ class AttendanceLineChart extends StatelessWidget {
                   ],
                   lineTouchData: LineTouchData(
                     touchTooltipData: LineTouchTooltipData(
-                      tooltipBgColor: Colors.blueGrey,
+                      getTooltipColor: (touchedSpot) => Colors.blueGrey,
                       getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
                         return touchedBarSpots.map((barSpot) {
                           final flSpot = barSpot;
