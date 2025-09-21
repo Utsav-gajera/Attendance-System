@@ -157,72 +157,90 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildWelcomeCard() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.indigo[400]!, Colors.indigo[600]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.withOpacity(0.3),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.school, color: Colors.white, size: 24),
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .doc('${widget.username}@student.com')
+          .snapshots(),
+      builder: (context, snapshot) {
+        String fullName = widget.username.toString();
+        
+        if (snapshot.hasData && snapshot.data!.exists) {
+          var data = snapshot.data!.data() as Map<String, dynamic>;
+          fullName = data['fullName'] ?? data['name'] ?? widget.username;
+        }
+        
+        // Get first name for greeting
+        String firstName = fullName.split(' ')[0];
+        
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.indigo[400]!, Colors.indigo[600]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.indigo.withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 4),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Good ${_getTimeOfDayGreeting()}!',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    Text(
-                      DateFormat('EEEE, MMM d').format(DateTime.now()),
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
+                    child: Icon(Icons.school, color: Colors.white, size: 24),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Good ${_getTimeOfDayGreeting()}, $firstName!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          DateFormat('EEEE, MMM d').format(DateTime.now()),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Ready to mark your attendance today?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 16),
-          Text(
-            'Ready to mark your attendance today?',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -545,35 +563,54 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             children: [
               Icon(Icons.person, color: Colors.indigo[600]),
               SizedBox(width: 8),
-              Text('Profile'),
+              Text('Student Profile'),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Username: ${widget.username}'),
-              SizedBox(height: 8),
-              Text('Email: ${widget.username}@student.com'),
-              SizedBox(height: 8),
-              Text('Role: Student'),
-              SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _signOut(context);
-                  },
-                  icon: Icon(Icons.logout),
-                  label: Text('Sign Out'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red[600],
-                    foregroundColor: Colors.white,
+          content: StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('students')
+                .doc('${widget.username}@student.com')
+                .snapshots(),
+            builder: (context, snapshot) {
+              String fullName = 'Unknown Student';
+              String subject = 'Not assigned';
+              
+              if (snapshot.hasData && snapshot.data!.exists) {
+                var data = snapshot.data!.data() as Map<String, dynamic>;
+                fullName = data['fullName'] ?? data['name'] ?? widget.username;
+                subject = data['subject'] ?? 'Not assigned';
+              }
+              
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Name: $fullName'),
+                  SizedBox(height: 8),
+                  Text('Email: ${widget.username}@student.com'),
+                  SizedBox(height: 8),
+                  Text('Subject: $subject'),
+                  SizedBox(height: 8),
+                  Text('Role: Student'),
+                  SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _signOut(context);
+                      },
+                      icon: Icon(Icons.logout),
+                      label: Text('Sign Out'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[600],
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           actions: [
             TextButton(

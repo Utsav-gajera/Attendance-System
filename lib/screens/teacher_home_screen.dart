@@ -16,6 +16,7 @@ class TeacherHomeScreen extends StatefulWidget {
 
 class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   String? _subjectName;
+  String? _teacherName;
   bool _showQRCode = false;
   int _selectedIndex = 0;
   final TextEditingController _studentEmailController = TextEditingController();
@@ -30,18 +31,38 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _extractSubjectName();
+    _loadTeacherData();
   }
 
-  void _extractSubjectName() {
+  Future<void> _loadTeacherData() async {
     User? user = FirebaseAuth.instance.currentUser;
     String? teacherEmail = user?.email;
     
     if (teacherEmail != null) {
-      List<String> parts = teacherEmail.split('@');
-      if (parts.length == 2) {
+      try {
+        DocumentSnapshot teacherDoc = await _firestore
+            .collection('teachers')
+            .doc(teacherEmail.toLowerCase())
+            .get();
+        
+        if (teacherDoc.exists) {
+          Map<String, dynamic> data = teacherDoc.data() as Map<String, dynamic>;
+          setState(() {
+            _subjectName = data['subject'] ?? 'Unknown Subject';
+            _teacherName = data['fullName'] ?? 'Unknown Teacher';
+          });
+        } else {
+          print('Teacher document not found for email: $teacherEmail');
+          setState(() {
+            _subjectName = 'Unknown Subject';
+            _teacherName = 'Unknown Teacher';
+          });
+        }
+      } catch (e) {
+        print('Error loading teacher data: $e');
         setState(() {
-          _subjectName = parts[0];
+          _subjectName = 'Error Loading';
+          _teacherName = 'Error Loading';
         });
       }
     }
@@ -219,7 +240,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome Back, Teacher!',
+                      'Welcome, ${_teacherName ?? "Teacher"}!',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -787,6 +808,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('Name: ${_teacherName ?? "Not available"}'),
+              SizedBox(height: 8),
               Text('Subject: ${_subjectName ?? "Not assigned"}'),
               SizedBox(height: 8),
               Text('Email: ${FirebaseAuth.instance.currentUser?.email ?? "Not available"}'),
@@ -935,7 +958,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         return Column(
           children: snapshot.data!.docs.take(5).map((doc) {
             var data = doc.data() as Map<String, dynamic>;
-            String studentName = data['name'] ?? data['email']?.split('@')[0] ?? 'Unknown';
+            String studentName = data['fullName'] ?? data['name'] ?? data['email']?.split('@')[0] ?? 'Unknown Student';
             
             return Container(
               margin: EdgeInsets.only(bottom: 8),
@@ -1186,7 +1209,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             TextField(
               controller: _studentNameController,
               decoration: InputDecoration(
-                labelText: 'Student Name',
+                labelText: 'Student Full Name',
+                hintText: 'e.g., John Smith, Maria Garcia',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person),
               ),
@@ -1270,18 +1294,32 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                     var student = snapshot.data!.docs[index];
                     var data = student.data() as Map<String, dynamic>;
                     
+                    String fullName = data['fullName'] ?? data['name'] ?? 'Unknown Student';
+                    
                     return Card(
                       margin: EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.blue[100],
-                          child: Icon(Icons.person, color: Colors.blue),
+                          backgroundColor: Colors.teal[100],
+                          child: Text(
+                            fullName.substring(0, 1).toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.teal[700],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                        title: Text(data['name'] ?? 'Unknown'),
-                        subtitle: Text(data['email'] ?? 'No email'),
+                        title: Text(
+                          fullName,
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          'Email: ${data['email'] ?? 'No email'}',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         trailing: IconButton(
                           icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteStudent(student.id),
+                          onPressed: () => _deleteStudent(student.id, data['email']),
                         ),
                       ),
                     );
@@ -1414,10 +1452,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
       // Only write Firestore if Auth user was created successfully
       await _firestore.collection('students').doc(studentEmail).set({
-        'name': _studentNameController.text,
+        'fullName': _studentNameController.text,
+        'name': _studentNameController.text, // Keep for backward compatibility
         'email': studentEmail,
         'subject': _subjectName,
         'createdAt': FieldValue.serverTimestamp(),
+        'authPassword': studentPassword, // Store temporarily for auth deletion (not secure for production)
       }, SetOptions(merge: true));
 
       _showSuccess('Student added successfully!');
@@ -1433,10 +1473,86 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     }
   }
 
-  Future<void> _deleteStudent(String studentId) async {
+  Future<void> _deleteStudent(String studentId, String? studentEmail) async {
+    // Confirm deletion with dialog
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Delete Student'),
+          content: Text('Are you sure you want to permanently delete this student? This will remove their account and all data.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
     try {
+      // First get the student data to retrieve the stored password
+      DocumentSnapshot studentDoc = await _firestore.collection('students').doc(studentId).get();
+      Map<String, dynamic>? studentData = studentDoc.data() as Map<String, dynamic>?;
+      String? storedPassword = studentData?['authPassword'];
+      
+      // Delete from Firestore first
       await _firestore.collection('students').doc(studentId).delete();
-      _showSuccess('Student deleted successfully!');
+      
+      // Try to delete from Firebase Auth using stored password
+      if (studentEmail != null && studentEmail.isNotEmpty && storedPassword != null && storedPassword.isNotEmpty) {
+        try {
+          // Use a secondary Firebase app to delete the user
+          FirebaseApp secondaryApp;
+          try {
+            secondaryApp = Firebase.app('teacher_worker');
+          } catch (_) {
+            secondaryApp = await Firebase.initializeApp(
+              name: 'teacher_worker',
+              options: DefaultFirebaseOptions.currentPlatform,
+            );
+          }
+
+          final FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+          
+          // Sign in with the student's credentials to get the user object
+          try {
+            UserCredential userCredential = await secondaryAuth.signInWithEmailAndPassword(
+              email: studentEmail,
+              password: storedPassword,
+            );
+            
+            // Delete the user
+            await userCredential.user?.delete();
+            
+            // Sign out from secondary app
+            await secondaryAuth.signOut();
+            
+            print('Student successfully removed from Firebase Auth');
+            _showSuccess('Student completely removed from system!');
+            
+          } catch (authError) {
+            print('Could not delete from Firebase Auth: $authError');
+            _showSuccess('Student removed from database. Note: Auth account may still exist.');
+          }
+          
+        } catch (e) {
+          print('Error during Auth deletion process: $e');
+          _showSuccess('Student removed from database. Note: Auth account may still exist.');
+        }
+      } else {
+        print('No stored password found for auth deletion');
+        _showSuccess('Student removed from database. Note: Auth account may still exist.');
+      }
+      
     } catch (e) {
       print('Error deleting student: $e');
       _showError('Failed to delete student');

@@ -14,6 +14,7 @@ class AdminHomeScreen extends StatefulWidget {
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final TextEditingController _teacherEmailController = TextEditingController();
   final TextEditingController _teacherPasswordController = TextEditingController();
+  final TextEditingController _teacherNameController = TextEditingController();
   final TextEditingController _subjectController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -646,6 +647,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ),
             SizedBox(height: 16),
             TextField(
+              controller: _teacherNameController,
+              decoration: InputDecoration(
+                labelText: 'Teacher Full Name',
+                hintText: 'e.g., Dr. John Smith, Prof. Maria Garcia',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+              ),
+            ),
+            SizedBox(height: 12),
+            TextField(
               controller: _teacherEmailController,
               decoration: InputDecoration(
                 labelText: 'Teacher Email',
@@ -669,7 +680,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               controller: _subjectController,
               decoration: InputDecoration(
                 labelText: 'Subject',
-                hintText: 'e.g., Mathematics, Physics',
+                hintText: 'e.g., Mathematics, Physics, Chemistry',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.book),
               ),
@@ -734,11 +745,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       margin: EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.red[100],
-                          child: Icon(Icons.person, color: Colors.red),
+                          backgroundColor: Colors.deepPurple[100],
+                          child: Text(
+                            (data['fullName'] ?? 'T').substring(0, 1).toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.deepPurple[700],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                        title: Text(data['email'] ?? 'Unknown'),
-                        subtitle: Text('Subject: ${data['subject'] ?? 'Not assigned'}'),
+                        title: Text(
+                          data['fullName'] ?? 'Unknown Teacher',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Email: ${data['email'] ?? 'Unknown'}',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            Text(
+                              'Subject: ${data['subject'] ?? 'Not assigned'}',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
                         trailing: IconButton(
                           icon: Icon(Icons.delete, color: Colors.red),
                           onPressed: () => _deleteTeacher(teacher.id),
@@ -756,13 +788,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Future<void> _addTeacher() async {
-    if (_teacherEmailController.text.isEmpty ||
+    if (_teacherNameController.text.isEmpty ||
+        _teacherEmailController.text.isEmpty ||
         _teacherPasswordController.text.isEmpty ||
         _subjectController.text.isEmpty) {
       _showError('Please fill all fields');
       return;
     }
 
+    final String fullName = _teacherNameController.text.trim();
     final String email = _teacherEmailController.text.trim().toLowerCase();
     final String password = _teacherPasswordController.text.trim();
     final String subject = _subjectController.text.trim();
@@ -807,15 +841,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       }
 
       // Upsert teacher record in Firestore using email as the document id
+      // Store a flag that allows auth deletion without password prompt
       await _firestore.collection('teachers').doc(email).set({
+        'fullName': fullName,
         'email': email,
         'subject': subject,
         'createdAt': FieldValue.serverTimestamp(),
+        'authPassword': password, // Store temporarily for auth deletion (not secure for production)
       }, SetOptions(merge: true));
 
       _showSuccess('Teacher added successfully!');
       
       // Clear form
+      _teacherNameController.clear();
       _teacherEmailController.clear();
       _teacherPasswordController.clear();
       _subjectController.clear();
@@ -827,14 +865,85 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Future<void> _deleteTeacher(String teacherId) async {
+    // Confirm deletion with dialog
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Delete Teacher'),
+          content: Text('Are you sure you want to permanently delete this teacher? This will remove their account and all data.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
     try {
-      // Delete from Firestore (teacherId is the doc id; we use email as id)
+      // First get the teacher data to retrieve the stored password
+      DocumentSnapshot teacherDoc = await _firestore.collection('teachers').doc(teacherId).get();
+      Map<String, dynamic>? teacherData = teacherDoc.data() as Map<String, dynamic>?;
+      String? storedPassword = teacherData?['authPassword'];
+      
+      // Delete from Firestore first (teacherId is the email/doc id)
       await _firestore.collection('teachers').doc(teacherId).delete();
       
-      // Delete from Firebase Auth (optional - you might want to keep the account)
-      // await _auth.deleteUser(teacherId);
+      // Delete from Firebase Auth using stored password
+      if (storedPassword != null && storedPassword.isNotEmpty) {
+        try {
+          // Use a secondary Firebase app to delete the user
+          FirebaseApp secondaryApp;
+          try {
+            secondaryApp = Firebase.app('admin_worker');
+          } catch (_) {
+            secondaryApp = await Firebase.initializeApp(
+              name: 'admin_worker',
+              options: DefaultFirebaseOptions.currentPlatform,
+            );
+          }
+
+          final FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+          
+          // Sign in with the teacher's credentials to get the user object
+          try {
+            UserCredential userCredential = await secondaryAuth.signInWithEmailAndPassword(
+              email: teacherId, // teacherId is the email
+              password: storedPassword,
+            );
+            
+            // Delete the user
+            await userCredential.user?.delete();
+            
+            // Sign out from secondary app
+            await secondaryAuth.signOut();
+            
+            print('Teacher successfully removed from Firebase Auth');
+            _showSuccess('Teacher completely removed from system!');
+            
+          } catch (authError) {
+            print('Could not delete from Firebase Auth: $authError');
+            _showSuccess('Teacher removed from database. Note: Auth account may still exist.');
+          }
+          
+        } catch (e) {
+          print('Error during Auth deletion process: $e');
+          _showSuccess('Teacher removed from database. Note: Auth account may still exist.');
+        }
+      } else {
+        print('No stored password found for auth deletion');
+        _showSuccess('Teacher removed from database. Note: Auth account may still exist.');
+      }
       
-      _showSuccess('Teacher deleted successfully!');
     } catch (e) {
       print('Error deleting teacher: $e');
       _showError('Failed to delete teacher');
@@ -1187,7 +1296,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         for (var doc in teacherSnapshot.data!.docs) {
           var data = doc.data() as Map<String, dynamic>;
           if (data['subject'] != null) {
-            subjectTeacherMap[data['subject']] = data['email'];
+            subjectTeacherMap[data['subject']] = data['fullName'] ?? data['email'] ?? 'Unknown Teacher';
           }
         }
         
@@ -1346,4 +1455,5 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ],
     );
   }
+
 }
