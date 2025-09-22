@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:attendance_system/main.dart';
 import 'package:attendance_system/firebase_options.dart';
 import 'package:intl/intl.dart';
+import '../services/user_management_service.dart';
+import '../utils/error_handler.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   @override
@@ -1109,13 +1111,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blue[100],
+                    color: Colors.red[100],
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    'View Only',
+                    'Admin can delete',
                     style: TextStyle(
-                      color: Colors.blue[800],
+                      color: Colors.red[800],
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1170,19 +1172,30 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               Text('Subjects: ${(data['enrolledSubjects'] as List).join(', ')}'),
                           ],
                         ),
-                        trailing: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green[100],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'Active',
-                            style: TextStyle(
-                              color: Colors.green[800],
-                              fontSize: 12,
-                            ),
-                          ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete_forever, color: Colors.red),
+                          tooltip: 'Delete student completely',
+                          onPressed: () async {
+                            final email = data['email'] as String?;
+                            if (email == null) return;
+                            await ErrorHandler.showConfirmDialog(
+                              context,
+                              title: 'Delete Student',
+                              message: 'This will permanently remove $email and all their attendance data. Continue? ',
+                              icon: Icons.delete_forever,
+                              iconColor: Colors.red,
+                              onConfirm: () async {
+                                try {
+                                  await UserManagementService.deleteStudentCompletely(email);
+                                  ErrorHandler.showSuccess(context, 'Student deleted');
+                                } catch (e) {
+                                  ErrorHandler.showError(context, 'Failed to delete student: ${e.toString()}');
+                                }
+                              },
+                              confirmText: 'Delete',
+                              cancelText: 'Cancel',
+                            );
+                          },
                         ),
                       ),
                     );

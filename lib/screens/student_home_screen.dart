@@ -25,6 +25,8 @@ class StudentHomeScreen extends StatefulWidget {
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   int _selectedIndex = 0;
   DateTime _selectedDate = DateTime.now();
+  String? _selectedSubjectCode;
+  String? _selectedSubjectName;
 
   // Method to sign out the user
   Future<void> _signOut(BuildContext context) async {
@@ -1033,147 +1035,243 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
   Widget _buildAttendanceTab() {
     final studentEmail = '${widget.username}@student.com';
-    
+
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FadeTransitionWidget(
-            child: Text(
-              'My Attendance',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
+          // Header
+          Text(
+            'Attendance',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
             ),
           ),
-          SizedBox(height: 16),
-          
-          // Attendance Statistics
-          FutureBuilder<Map<String, int>>(
-            future: AttendanceService.getAttendanceStats(studentEmail: studentEmail),
+          SizedBox(height: 12),
+
+          // Overall summary from subjects subcollection (total of totals)
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('students')
+                .doc(studentEmail)
+                .collection('subjects')
+                .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return AnimatedCard(
-                  child: Column(
-                    children: [
-                      Text(
-                        'Attendance Statistics',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+              final docs = snapshot.data?.docs ?? [];
+              int total = 0;
+              for (final d in docs) {
+                final m = d.data() as Map<String, dynamic>;
+                total += (m['totalAttendance'] as int?) ?? 0;
+              }
+              return _overallSummaryCard(total);
+            },
+          ),
+
+          SizedBox(height: 16),
+
+          // Subject list with per-subject totals, tappable to filter
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('students')
+                .doc(studentEmail)
+                .collection('subjects')
+                .orderBy('subjectName')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Card(child: Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())));
+              }
+              final subjects = snapshot.data?.docs ?? [];
+              if (subjects.isEmpty) {
+                return Card(
+                  child: ListTile(
+                    leading: Icon(Icons.book_outlined, color: Colors.grey[600]),
+                    title: Text('No subjects enrolled'),
+                    subtitle: Text('Ask your teacher to enroll you'),
+                  ),
+                );
+              }
+
+              return Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
                         children: [
-                          _buildStatItem(
-                            'Total Classes',
-                            '${snapshot.data!['totalAttendance'] ?? 0}',
-                            Icons.school,
-                            Colors.blue,
+                          Expanded(
+                            child: Text('Subjects', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           ),
-                          _buildStatItem(
-                            'Unique Days',
-                            '${snapshot.data!['uniqueDays'] ?? 0}',
-                            Icons.calendar_today,
-                            Colors.green,
-                          ),
+                          if (_selectedSubjectCode != null)
+                            TextButton.icon(
+                              onPressed: () => setState(() {
+                                _selectedSubjectCode = null;
+                                _selectedSubjectName = null;
+                              }),
+                              icon: Icon(Icons.clear),
+                              label: Text('Clear'),
+                            )
                         ],
                       ),
-                    ],
-                  ),
-                );
-              } else {
-                return AnimatedCard(
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-            },
-          ),
-          
-          SizedBox(height: 16),
-          
-          // Attendance by Subject Chart
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: AttendanceService.getStudentAttendance(studentEmail: studentEmail),
-            builder: (context, snapshot) {
-              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                // Group by subject
-                final subjectCounts = <String, int>{};
-                for (var record in snapshot.data!) {
-                  final subject = record['subject'] ?? 'Unknown';
-                  subjectCounts[subject] = (subjectCounts[subject] ?? 0) + 1;
-                }
-                
-                final subjectData = subjectCounts.entries
-                    .map((e) => SubjectData(subject: e.key, count: e.value))
-                    .toList();
-                
-                return AttendancePieChart(
-                  data: subjectData,
-                  title: 'Attendance by Subject',
-                );
-              } else {
-                return AnimatedCard(
-                  child: Center(
-                    child: Text(
-                      'No attendance data available',
-                      style: TextStyle(color: Colors.grey[600]),
                     ),
-                  ),
-                );
-              }
-            },
-          ),
-          
-          SizedBox(height: 16),
-          
-          // Recent Attendance History
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: AttendanceService.getStudentAttendance(
-              studentEmail: studentEmail,
-              startDate: DateTime.now().subtract(Duration(days: 30)),
-            ),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return AnimatedCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recent Attendance',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 16),
-                      if (snapshot.data!.isEmpty)
-                        Center(
-                          child: Text(
-                            'No recent attendance records',
-                            style: TextStyle(color: Colors.grey[600]),
+                    Divider(height: 0),
+                    ...subjects.map((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      final code = data['subjectCode'] ?? d.id;
+                      final name = data['subjectName'] ?? code;
+                      final count = (data['totalAttendance'] as int?) ?? 0;
+                      final selected = _selectedSubjectCode == code;
+                      return ListTile(
+                        leading: Icon(Icons.book, color: selected ? Colors.indigo : Colors.grey[700]),
+                        title: Text(name),
+                        subtitle: data['teacherName'] != null ? Text('Teacher: ${data['teacherName']}') : null,
+                        trailing: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: selected ? Colors.indigo[50] : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: selected ? Colors.indigo : Colors.grey[300]!),
                           ),
-                        )
-                      else
-                        ...snapshot.data!.take(5).map((record) => _buildAttendanceListItem(record)),
-                    ],
-                  ),
-                );
-              } else {
-                return AnimatedCard(
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
+                          child: Text('$count', style: TextStyle(fontWeight: FontWeight.w600, color: selected ? Colors.indigo : Colors.grey[800])),
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _selectedSubjectCode = code;
+                            _selectedSubjectName = name;
+                          });
+                        },
+                      );
+                    })
+                  ],
+                ),
+              );
             },
           ),
+
+          SizedBox(height: 16),
+
+          // Day-wise list for selected subject
+          if (_selectedSubjectCode != null)
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: AttendanceService.getStudentAttendance(
+                studentEmail: studentEmail,
+                subjectCode: _selectedSubjectCode,
+                startDate: DateTime.now().subtract(Duration(days: 90)),
+                endDate: DateTime.now(),
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Card(child: Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())));
+                }
+                final records = snapshot.data ?? [];
+                return _subjectDayWiseCard(_selectedSubjectName ?? _selectedSubjectCode!, records);
+              },
+            ),
         ],
       ),
     );
+  }
+
+  Widget _overallSummaryCard(int total) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.indigo[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.assessment, color: Colors.indigo, size: 24),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Overall Attendance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  SizedBox(height: 4),
+                  Text('Total classes attended across all subjects', style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
+            ),
+            Text('$total', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.indigo)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _subjectDayWiseCard(String subjectName, List<Map<String, dynamic>> records) {
+    // Group by date string
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (final r in records) {
+      final d = r['date'] as String? ?? 'Unknown';
+      grouped.putIfAbsent(d, () => []).add(r);
+    }
+
+    final sortedDates = grouped.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_note, color: Colors.indigo),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('$subjectName — Day-wise', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            if (records.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text('No attendance records found', style: TextStyle(color: Colors.grey[600])),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                itemCount: sortedDates.length,
+                itemBuilder: (context, index) {
+                  final dateStr = sortedDates[index];
+                  final items = grouped[dateStr]!;
+                  final timeList = items.map((e) => e['time'] ?? '').where((t) => t.toString().isNotEmpty).join(', ');
+                  final prettyDate = _prettyDate(dateStr);
+                  return ListTile(
+                    leading: Icon(Icons.check_circle, color: Colors.green),
+                    title: Text(prettyDate),
+                    subtitle: timeList.isNotEmpty ? Text('Times: $timeList') : null,
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _prettyDate(String yyyyMmDd) {
+    try {
+      final d = DateTime.parse(yyyyMmDd);
+      return DateFormat('EEE, MMM d, yyyy').format(d);
+    } catch (_) {
+      return yyyyMmDd;
+    }
   }
 
   Widget _buildStatItem(String label, String value, IconData icon, Color color) {

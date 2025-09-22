@@ -6,6 +6,9 @@ class AttendanceService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final OfflineService _offlineService = OfflineService();
 
+  // Configure how long a QR session remains valid (lecture duration window)
+  static const int attendanceWindowMinutes = 90;
+
   // Improved data structure:
   // - attendance/{subjectCode}/records/{recordId} - for subject-wise attendance
   // - students/{studentEmail}/attendance/{recordId} - for student-wise attendance 
@@ -175,7 +178,7 @@ class AttendanceService {
         'teacherEmail': teacherEmail,
         'teacherName': teacherName,
         'generatedAt': FieldValue.serverTimestamp(),
-        'validUntil': Timestamp.fromDate(now.add(Duration(hours: 2))), // Valid for 2 hours
+        'validUntil': Timestamp.fromDate(now.add(Duration(minutes: attendanceWindowMinutes))),
         'isActive': true,
       });
       
@@ -295,18 +298,19 @@ class AttendanceService {
           .where('createdAt', isLessThanOrEqualTo: endMs)
           .orderBy('createdAt', descending: true);
       
-      // Add subject filter if specified
-      if (subjectCode != null) {
-        query = query.where('subjectCode', isEqualTo: subjectCode);
-      }
-
+      // Note: Avoid composite index by not filtering on subjectCode in Firestore; filter client-side instead
       final snapshot = await query.get();
 
-      return snapshot.docs.map((doc) {
+      final all = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return data;
       }).toList();
+
+      if (subjectCode != null) {
+        return all.where((e) => e['subjectCode'] == subjectCode).toList();
+      }
+      return all;
 
     } catch (e) {
       print('Error getting student attendance: $e');

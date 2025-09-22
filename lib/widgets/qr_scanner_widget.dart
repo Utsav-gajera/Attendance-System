@@ -236,7 +236,16 @@ class _QRScannerWidgetState extends State<QRScannerWidget>
         setState(() {
           attended = false;
         });
-        ErrorHandler.showError(context, 'Error marking attendance');
+        final msg = e.toString();
+        if (msg.contains('expired')) {
+          ErrorHandler.showWarning(context, 'QR code expired. Ask your teacher to generate a new one.');
+        } else if (msg.contains('no longer active')) {
+          ErrorHandler.showWarning(context, 'This QR session is not active any more.');
+        } else if (msg.contains('already marked')) {
+          ErrorHandler.showInfo(context, 'You already marked attendance for this subject today.');
+        } else {
+          ErrorHandler.showError(context, 'Could not mark attendance: $msg');
+        }
       }
     }
   }

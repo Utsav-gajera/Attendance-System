@@ -194,23 +194,117 @@ class UserManagementService {
       }
 
       final teacherData = teacherDoc.data() as Map<String, dynamic>;
-      final password = teacherData['password'] as String?;
+      final password = (teacherData['authPassword'] as String?) ?? (teacherData['password'] as String?);
 
-      // Delete from Firestore
-      await _firestore.collection('teachers').doc(email).delete();
-
-      // Delete associated subjects
+      // 1) For every subject owned by this teacher, cascade delete:
       final subjectsQuery = await _firestore
           .collection('subjects')
           .where('teacherEmail', isEqualTo: email)
           .get();
 
-      for (var doc in subjectsQuery.docs) {
-        await doc.reference.delete();
+      for (var subjectDoc in subjectsQuery.docs) {
+        final subjectCode = subjectDoc.id;
+
+        // a) Delete all attendance records under attendance/{subject}/records and their mirrors
+        final recordsSnap = await _firestore
+            .collection('attendance')
+            .doc(subjectCode)
+            .collection('records')
+            .get();
+        for (final rec in recordsSnap.docs) {
+          final recData = rec.data() as Map<String, dynamic>;
+          final recordId = (recData['recordId'] as String?) ?? rec.id;
+          final studentEmail = recData['studentEmail'] as String?;
+          final dateStr = recData['date'] as String?;
+
+          // Delete student's copy
+          if (studentEmail != null && studentEmail.isNotEmpty) {
+            await _firestore
+                .collection('students')
+                .doc(studentEmail)
+                .collection('attendance')
+                .doc(recordId)
+                .delete()
+                .catchError((_) {});
+          }
+
+          // Delete teacher's copy
+          await _firestore
+              .collection('teachers')
+              .doc(email)
+              .collection('attendance')
+              .doc(recordId)
+              .delete()
+              .catchError((_) {});
+
+          // Delete daily mirror
+          if (dateStr != null && dateStr.isNotEmpty) {
+            await _firestore
+                .collection('daily_attendance')
+                .doc(dateStr)
+                .collection('records')
+                .doc(recordId)
+                .delete()
+                .catchError((_) {});
+          }
+
+          // Finally delete subject record
+          await rec.reference.delete().catchError((_) {});
+        }
+
+        // b) Remove roster mirrors and student subject refs
+        final rosterSnap = await _firestore
+            .collection('subject_enrollments')
+            .doc(subjectCode)
+            .collection('students')
+            .get();
+        for (final r in rosterSnap.docs) {
+          final rData = r.data() as Map<String, dynamic>;
+          final studentEmail = rData['studentEmail'] as String? ?? r.id;
+
+          // Remove student->subject subdoc
+          await _firestore
+              .collection('students')
+              .doc(studentEmail)
+              .collection('subjects')
+              .doc(subjectCode)
+              .delete()
+              .catchError((_) {});
+
+          // Update student arrays and legacy enrollment view
+          await _firestore.collection('students').doc(studentEmail).set({
+            'subjects': FieldValue.arrayRemove([subjectCode])
+          }, SetOptions(merge: true));
+          await _firestore.collection('student_enrollments').doc(studentEmail).set({
+            'studentEmail': studentEmail,
+            'subjects': FieldValue.arrayRemove([subjectCode])
+          }, SetOptions(merge: true));
+
+          // Delete roster doc
+          await r.reference.delete().catchError((_) {});
+        }
+        // Remove the subject_enrollments container doc if present
+        await _firestore.collection('subject_enrollments').doc(subjectCode).delete().catchError((_) {});
+
+        // c) Delete the subject document
+        await subjectDoc.reference.delete().catchError((_) {});
       }
 
-      // Try to delete from Firebase Auth if password available
-      if (password != null) {
+      // 2) Delete all teacher-specific attendance subcollection
+      final tAttSnap = await _firestore
+          .collection('teachers')
+          .doc(email)
+          .collection('attendance')
+          .get();
+      for (final d in tAttSnap.docs) {
+        await d.reference.delete();
+      }
+
+      // 3) Delete the teacher document itself
+      await _firestore.collection('teachers').doc(email).delete();
+
+      // 4) Try to delete from Firebase Auth if password available
+      if (password != null && password.isNotEmpty) {
         try {
           FirebaseApp? secondaryApp;
           try {
@@ -245,66 +339,140 @@ class UserManagementService {
     }
   }
 
-  // Delete student
+  // Delete student (legacy). Prefer deleteStudentCompletely.
   static Future<bool> deleteStudent(String email) async {
+    return await deleteStudentCompletely(email);
+  }
+
+  // Admin-only: completely remove a student and all of their data
+  static Future<bool> deleteStudentCompletely(String email) async {
     try {
-      // Get student data first
-      final studentDoc = await _firestore.collection('students').doc(email).get();
-      if (!studentDoc.exists) {
-        throw Exception('Student not found');
+      // Guard: only admin can perform
+      final current = _auth.currentUser;
+      if (current == null || !(current.email?.endsWith('@admin.com') ?? false)) {
+        throw Exception('Only admin can delete students');
       }
 
+      final studentRef = _firestore.collection('students').doc(email);
+      final studentDoc = await studentRef.get();
+      if (!studentDoc.exists) throw Exception('Student not found');
       final studentData = studentDoc.data() as Map<String, dynamic>;
-      final password = studentData['password'] as String?;
 
-      // Delete from Firestore
-      await _firestore.collection('students').doc(email).delete();
-      
-      // Delete enrollment
-      await _firestore.collection('student_enrollments').doc(email).delete();
+      final storedPassword = (studentData['authPassword'] as String?) ?? (studentData['password'] as String?);
 
-      // Delete attendance records
-      final attendanceQuery = await _firestore
+      // 1) Fetch enrolled subjects to clean mirrors
+      final enrolledSubjectsSnap = await studentRef.collection('subjects').get();
+      final enrolledCodes = <String>[];
+      for (final d in enrolledSubjectsSnap.docs) {
+        final data = d.data();
+        final code = (data['subjectCode'] as String?) ?? d.id;
+        if (code.isNotEmpty) enrolledCodes.add(code);
+      }
+
+      // 2) Delete all attendance records using student's own subcollection to avoid collection group index
+      // We iterate student's attendance, and for each record, delete all mirrored entries
+      QuerySnapshot studentAttendanceSnap = await studentRef.collection('attendance').get();
+      for (final aDoc in studentAttendanceSnap.docs) {
+        final data = aDoc.data() as Map<String, dynamic>;
+        final recordId = (data['recordId'] as String?) ?? aDoc.id;
+        final subjectCode = (data['subjectCode'] as String?) ?? (data['subject'] as String?);
+        final teacherEmail = data['teacherEmail'] as String?;
+        final dateStr = data['date'] as String?; // yyyy-MM-dd
+
+        // Delete subject-wise record
+        if (subjectCode != null && subjectCode.isNotEmpty) {
+          await _firestore
+              .collection('attendance')
+              .doc(subjectCode)
+              .collection('records')
+              .doc(recordId)
+              .delete()
+              .catchError((_) {});
+        }
+
+        // Delete teacher-wise record
+        if (teacherEmail != null && teacherEmail.isNotEmpty) {
+          await _firestore
+              .collection('teachers')
+              .doc(teacherEmail)
+              .collection('attendance')
+              .doc(recordId)
+              .delete()
+              .catchError((_) {});
+        }
+
+        // Delete daily attendance record
+        if (dateStr != null && dateStr.isNotEmpty) {
+          await _firestore
+              .collection('daily_attendance')
+              .doc(dateStr)
+              .collection('records')
+              .doc(recordId)
+              .delete()
+              .catchError((_) {});
+        }
+
+        // Delete student's own record
+        await aDoc.reference.delete().catchError((_) {});
+      }
+
+      // 3) Delete student's attendance_unified fallback
+      final unified = await _firestore
           .collection('attendance_unified')
           .where('studentEmail', isEqualTo: email)
           .get();
-
-      for (var doc in attendanceQuery.docs) {
+      for (final doc in unified.docs) {
         await doc.reference.delete();
       }
 
-      // Try to delete from Firebase Auth if password available
-      if (password != null) {
+      // 4) Remove mirrors under subject_enrollments
+      for (final code in enrolledCodes) {
+        final mirrorRef = _firestore
+            .collection('subject_enrollments')
+            .doc(code)
+            .collection('students')
+            .doc(email);
+        await mirrorRef.delete().catchError((_) {});
+      }
+
+      // 5) Delete subcollections under students/{email}
+      final studAttendance = await studentRef.collection('attendance').get();
+      for (final doc in studAttendance.docs) {
+        await doc.reference.delete();
+      }
+      final studSubjects = await studentRef.collection('subjects').get();
+      for (final doc in studSubjects.docs) {
+        await doc.reference.delete();
+      }
+
+      // 6) Finally delete the student document and enrollment container
+      await studentRef.delete();
+      await _firestore.collection('student_enrollments').doc(email).delete().catchError((_) {});
+
+      // 7) Attempt to remove from Firebase Auth if we have a stored password
+      if (storedPassword != null && storedPassword.isNotEmpty) {
         try {
           FirebaseApp? secondaryApp;
           try {
-            secondaryApp = Firebase.app('secondary');
-          } catch (e) {
+            secondaryApp = Firebase.app('admin_worker');
+          } catch (_) {
             secondaryApp = await Firebase.initializeApp(
-              name: 'secondary',
+              name: 'admin_worker',
               options: DefaultFirebaseOptions.currentPlatform,
             );
           }
-
           final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-          
-          // Sign in to delete account
-          await secondaryAuth.signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-          
-          // Delete account
+          await secondaryAuth.signInWithEmailAndPassword(email: email, password: storedPassword);
           await secondaryAuth.currentUser?.delete();
           await secondaryAuth.signOut();
         } catch (e) {
-          print('Could not delete from Firebase Auth: $e');
+          print('Could not delete Auth user for $email: $e');
         }
       }
 
       return true;
     } catch (e) {
-      print('Error deleting student: $e');
+      print('Error deleting student completely: $e');
       rethrow;
     }
   }

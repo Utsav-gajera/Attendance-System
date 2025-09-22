@@ -27,6 +27,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   final TextEditingController _studentEmailController = TextEditingController();
   final TextEditingController _studentPasswordController = TextEditingController();
   final TextEditingController _studentNameController = TextEditingController();
+  bool _checkingStudent = false;
+  bool? _studentExists;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   CalendarFormat _calendarFormat = CalendarFormat.month;
@@ -1324,23 +1326,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add New Student',
+              'Add / Assign Student',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
             SizedBox(height: 16),
-            TextField(
-              controller: _studentNameController,
-              decoration: InputDecoration(
-                labelText: 'Student Full Name',
-                hintText: 'e.g., John Smith, Maria Garcia',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-            ),
-            SizedBox(height: 12),
             TextField(
               controller: _studentEmailController,
               decoration: InputDecoration(
@@ -1351,27 +1343,71 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
               ),
             ),
             SizedBox(height: 12),
-            TextField(
-              controller: _studentPasswordController,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
-              ),
-              obscureText: true,
-            ),
-            SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _addStudent,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _checkingStudent ? null : _checkStudent,
+                    icon: _checkingStudent
+                        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Icon(Icons.search),
+                    label: Text(_checkingStudent ? 'Checking...' : 'Check'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
+                  ),
                 ),
-                child: Text('Add Student'),
-              ),
+                SizedBox(width: 12),
+                if (_studentExists == true)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _assignStudentToCurrentSubject,
+                      icon: Icon(Icons.assignment_turned_in),
+                      label: Text('Assign Subject'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                    ),
+                  ),
+              ],
             ),
+            if (_studentExists == false) ...[
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange[200]!)),
+                child: Row(children: [
+                  Icon(Icons.info, color: Colors.orange[700]),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Student not found. Add student, then assign to this subject.')),
+                ]),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: _studentNameController,
+                decoration: InputDecoration(
+                  labelText: 'Student Full Name',
+                  hintText: 'e.g., John Smith, Maria Garcia',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: _studentPasswordController,
+                decoration: InputDecoration(
+                  labelText: 'Password (for new account)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
+                obscureText: true,
+              ),
+              SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _addStudent,
+                  icon: Icon(Icons.person_add),
+                  label: Text('Create Student'),
+                ),
+              ),
+            ]
           ],
         ),
       ),
@@ -1525,6 +1561,78 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _checkStudent() async {
+    final email = _studentEmailController.text.trim().toLowerCase();
+    if (!email.endsWith('@student.com')) {
+      _showError('Student email must end with @student.com');
+      return;
+    }
+    setState(() => _checkingStudent = true);
+    try {
+      final doc = await _firestore.collection('students').doc(email).get();
+      setState(() {
+        _studentExists = doc.exists;
+      });
+      if (doc.exists) {
+        _showSuccess('Student exists. You can assign the subject.');
+      } else {
+        _showWarning('Student does not exist. Please create the student.');
+      }
+    } catch (e) {
+      _showError('Check failed: ${e.toString()}');
+    } finally {
+      setState(() => _checkingStudent = false);
+    }
+  }
+
+  Future<void> _assignStudentToCurrentSubject() async {
+    final email = _studentEmailController.text.trim().toLowerCase();
+    if (_subjectCode == null || _subjectName == null) {
+      _showError('Subject not loaded yet');
+      return;
+    }
+    final teacherEmail = FirebaseAuth.instance.currentUser?.email;
+    if (teacherEmail == null) {
+      _showError('Teacher not authenticated');
+      return;
+    }
+    try {
+      final studentDoc = await _firestore.collection('students').doc(email).get();
+      if (!studentDoc.exists) {
+        _showError('Student not found. Create student first.');
+        return;
+      }
+      // Check if already assigned to this subject
+      final currentAssign = await _firestore
+          .collection('students')
+          .doc(email)
+          .collection('subjects')
+          .doc(_subjectCode!)
+          .get();
+      if (currentAssign.exists) {
+        _showInfo('This student is already assigned to $_subjectName');
+        return;
+      }
+
+      final data = studentDoc.data() as Map<String, dynamic>;
+      final name = data['fullName'] ?? data['name'] ?? email.split('@')[0];
+      await EnrollmentService.enrollStudentToSubject(
+        studentEmail: email,
+        studentName: name,
+        subjectCode: _subjectCode!,
+        subjectName: _subjectName!,
+        teacherEmail: teacherEmail,
+        teacherName: _teacherName ?? 'Teacher',
+      );
+      _showSuccess('Assigned $email to $_subjectName');
+      setState(() {
+        _studentExists = true;
+      });
+    } catch (e) {
+      _showError('Failed to assign subject: ${e.toString()}');
+    }
+  }
+
   Future<void> _addStudent() async {
     // Basic validations: name and email required; password optional for existing students
     if (_studentNameController.text.isEmpty || _studentEmailController.text.isEmpty) {
@@ -1596,30 +1704,22 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         return;
       }
 
-      // Upsert student base doc without single-subject field and enroll them
+      // Create or update the base student document only (do not auto-assign subject)
       await _firestore.collection('students').doc(studentEmail).set({
         'fullName': _studentNameController.text,
         'name': _studentNameController.text, // backward compatibility
         'email': studentEmail,
-        'subjects': FieldValue.arrayUnion([_subjectCode]),
         'createdAt': FieldValue.serverTimestamp(),
         if (createdAuthUser) 'authPassword': studentPassword, // legacy field
       }, SetOptions(merge: true));
 
-      await EnrollmentService.enrollStudentToSubject(
-        studentEmail: studentEmail,
-        studentName: _studentNameController.text,
-        subjectCode: _subjectCode!,
-        subjectName: _subjectName!,
-        teacherEmail: teacherEmail,
-        teacherName: _teacherName ?? 'Teacher',
-      );
+      _showSuccess('Student created. Now click "Assign Subject" to add them to $_subjectName');
+      setState(() {
+        _studentExists = true;
+      });
 
-      _showSuccess('Student enrolled to $_subjectName successfully!');
-
-      // Clear form
+      // Keep email; clear only name/password so teacher can assign right away
       _studentNameController.clear();
-      _studentEmailController.clear();
       _studentPasswordController.clear();
 
     } catch (e) {
@@ -1751,6 +1851,24 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _showWarning(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  void _showInfo(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue,
       ),
     );
   }

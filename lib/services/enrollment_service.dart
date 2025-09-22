@@ -59,6 +59,13 @@ class EnrollmentService {
     }, SetOptions(merge: true));
 
     await batch.commit();
+
+    // Keep legacy student_enrollments in sync for other parts of the app
+    await _firestore.collection('student_enrollments').doc(email).set({
+      'studentEmail': email,
+      'subjects': FieldValue.arrayUnion([code]),
+      'enrolledAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   // Remove a student from a subject (does not delete the student's account)
@@ -95,6 +102,61 @@ class EnrollmentService {
     }, SetOptions(merge: true));
 
     await batch.commit();
+
+    // Also update legacy student_enrollments view
+    await _firestore.collection('student_enrollments').doc(email).set({
+      'studentEmail': email,
+      'subjects': FieldValue.arrayRemove([code]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Cascade delete attendance for this student and subject
+    // Query student's own attendance subcollection for this subject (no composite index required)
+    final attendanceSnap = await studentRef
+        .collection('attendance')
+        .where('subjectCode', isEqualTo: code)
+        .get();
+
+    for (final doc in attendanceSnap.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final recordId = (data['recordId'] as String?) ?? doc.id;
+      final teacherEmail = data['teacherEmail'] as String?;
+      final dateStr = data['date'] as String?; // yyyy-MM-dd
+
+      // Delete subject-wise attendance
+      await _firestore
+          .collection('attendance')
+          .doc(code)
+          .collection('records')
+          .doc(recordId)
+          .delete()
+          .catchError((_) {});
+
+      // Delete teacher-wise attendance mirror
+      if (teacherEmail != null && teacherEmail.isNotEmpty) {
+        await _firestore
+            .collection('teachers')
+            .doc(teacherEmail)
+            .collection('attendance')
+            .doc(recordId)
+            .delete()
+            .catchError((_) {});
+      }
+
+      // Delete daily attendance mirror
+      if (dateStr != null && dateStr.isNotEmpty) {
+        await _firestore
+            .collection('daily_attendance')
+            .doc(dateStr)
+            .collection('records')
+            .doc(recordId)
+            .delete()
+            .catchError((_) {});
+      }
+
+      // Finally delete the student's own record
+      await doc.reference.delete().catchError((_) {});
+    }
   }
 
   // Stream roster for a subject
