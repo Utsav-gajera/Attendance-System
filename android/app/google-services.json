@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:826805641620:android:6172ead1a2e25dea4eaf81",
+        "mobilesdk_app_id": "1:826805641620:android:e50b70dc615df4ac4eaf81",
         "android_client_info": {
-          "package_name": "com.example.attendance_system"
+          "package_name": "com.example.smartcampusid"
         }
       },
       "oauth_client": [],

@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Attendance System',
+      title: 'SmartCampus ID',
       theme: _accessibilityService.getAccessibleTheme(ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
@@ -194,7 +194,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               SizedBox(height: 32),
               Text(
-                'Attendance System',
+                'SmartCampus ID',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,

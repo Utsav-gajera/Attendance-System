@@ -1,271 +1,200 @@
-# 🎓 Advanced Attendance System
+# 🎓 SmartCampus ID (Flutter + Firebase)
 
-A comprehensive Flutter-based attendance management system with QR code scanning, real-time analytics, offline support, and enhanced accessibility features.
+A production-ready attendance management app for Admins, Teachers, and Students with QR-based marking, analytics, and robust data model. This README reflects the current architecture and behavior of the codebase.
 
-## ✨ Key Features
+## Highlights
 
-### 🔐 User Management
-- **Multi-role Authentication**: Admin, Teacher, and Student roles
-- **Secure Login**: Firebase Authentication with enhanced error handling
-- **User Profile Management**: Full CRUD operations with data validation
-- **Real-time Data Sync**: Automatic updates across all devices
+- Multi-role app: Admin, Teacher, Student (email domain based)
+  - Admin: any email ending with `@admin.com`
+  - Teacher: `@teacher.com`
+  - Student: `@student.com`
+- Many-to-many enrollment between students and subjects
+- Reliable QR attendance with a configurable validity window (default: 90 minutes)
+- Real-time Firestore sync + offline queue (with fallback collection)
+- Full cascade-deletion for all remove operations (see “Data lifecycle”)
 
-### 📱 QR Code Attendance
-- **QR Code Generation**: Dynamic QR codes for each class session
-- **Mobile Scanning**: Built-in QR code scanner with camera integration
-- **Instant Marking**: Real-time attendance marking with immediate feedback
-- **Duplicate Prevention**: Smart logic to prevent duplicate attendance entries
+## Data model (Firestore)
 
-### 📊 Analytics & Reporting
-- **Interactive Charts**: Pie charts, bar charts, and line graphs using fl_chart
-- **Attendance Statistics**: Comprehensive analytics with trends and insights
-- **CSV Export**: Export attendance data for external analysis
-- **Performance Tracking**: Student and class performance metrics
-- **Real-time Dashboards**: Live updating statistics and reports
+Collections and mirrors used by the app:
 
-### 🚀 Performance Optimizations
-- **Lazy Loading**: Efficient data loading with pagination
-- **Memory Management**: Automatic stream disposal and resource cleanup
-- **Query Optimization**: Optimized Firestore queries with caching
-- **Image Optimization**: Efficient image loading and caching
-- **Debounced Search**: Smart search with reduced API calls
+```
+attendance/
+├── {subjectCode}/
+│   └── records/
+│       └── {recordId}  // recordId: {studentLocal}_{subjectCode}_{yyyy-MM-dd}
 
-### 📴 Offline Support
-- **Data Caching**: Local data storage with SharedPreferences
-- **Offline Operations**: Queue operations when offline, sync when online
-- **Connection Monitoring**: Real-time connection status tracking
-- **Automatic Sync**: Smart synchronization when connection is restored
-- **Conflict Resolution**: Intelligent handling of data conflicts
+students/
+├── {studentEmail}/
+│   ├── attendance/
+│   │   └── {recordId}
+│   └── subjects/
+│       └── {subjectCode}
 
-### ♿ Accessibility Features
-- **Screen Reader Support**: Full compatibility with screen readers
-- **High Contrast Mode**: Enhanced visibility for users with visual impairments
-- **Large Text Support**: Scalable text sizes throughout the app
-- **Keyboard Navigation**: Complete keyboard navigation support
-- **Semantic Labels**: Comprehensive semantic annotations
-- **Focus Management**: Proper focus handling for assistive technologies
+teachers/
+├── {teacherEmail}/
+│   └── attendance/
+│       └── {recordId}
 
-### 🎨 Enhanced UI/UX
-- **Smooth Animations**: Custom transitions and micro-interactions
-- **Loading States**: Comprehensive loading indicators and feedback
-- **Error Handling**: User-friendly error messages and recovery options
-- **Responsive Design**: Optimized for different screen sizes
-- **Material Design 3**: Modern UI following latest design guidelines
+subject_enrollments/
+├── {subjectCode}/
+│   └── students/
+│       └── {studentEmail}
 
-### 🔒 Security & Validation
-- **Input Validation**: Comprehensive data validation and sanitization
-- **XSS Protection**: Protection against injection attacks
-- **Data Encryption**: Secure data handling and storage
-- **Authentication Guards**: Route protection and session management
-- **Privacy Controls**: User data privacy and control features
+student_enrollments/
+├── {studentEmail}
 
-## Screenshots
+qr_sessions/
+├── {subjectCode}_{yyyy-MM-dd}
 
-Here are some screenshots of the application showcasing its UI and key functionality:
+daily_attendance/
+├── {yyyy-MM-dd}/
+│   └── records/{recordId}
 
-<table>
-  <tr>
-    <td><img src="assets/screenshots/Screenshot_1.jpg" alt="Login Page" width="300"/></td>
-    <td><img src="assets/screenshots/Screenshot_2.jpg" alt="Scan Page" width="300"/></td>
-  </tr>
-  <tr>
-    <td><img src="assets/screenshots/Screenshot_3.jpg" alt="Confirmation Page" width="300"/></td>
-    <td><img src="assets/screenshots/Screenshot_4.jpg" alt="Student List Page" width="300"/></td>
-  </tr>
-</table>
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Flutter SDK (>=3.3.0)
-- Firebase project setup
-- Android Studio / VS Code
-- Physical device or emulator
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Utsav-gajera/Attendance-System.git
-   cd Attendance-System
-   ```
-
-2. **Install dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Firebase Setup**
-   - Create a Firebase project
-   - Enable Authentication and Firestore
-   - Download and place `google-services.json` (Android) and `GoogleService-Info.plist` (iOS)
-   - Update `firebase_options.dart` with your configuration
-
-4. **Run the app**
-   ```bash
-   flutter run
-   ```
-
-### Initial Setup
-
-1. **Admin Account**: Create an admin account with email ending in `@admin.com`
-2. **Teacher Accounts**: Admin can create teacher accounts with `@teacher.com` emails
-3. **Student Accounts**: Teachers can create student accounts with `@student.com` emails
-
-## 📱 User Roles & Features
-
-### 👨‍💼 Admin Features
-- User management (teachers and students)
-- System analytics and reports
-- Global settings and configuration
-- Data export and backup
-- Accessibility settings management
-
-### 👨‍🏫 Teacher Features
-- Student enrollment and management
-- QR code generation for classes
-- Attendance tracking and reporting
-- Student performance analytics
-- Class schedule management
-
-### 👨‍🎓 Student Features
-- QR code scanning for attendance
-- Personal attendance history
-- Performance tracking
-- Profile management
-- Accessibility preferences
-
-## 📊 Recent Improvements
-
-### ✅ Completed Enhancements
-
-1. **Enhanced Error Handling and User Feedback**
-   - Comprehensive error handling with user-friendly messages
-   - Loading states and progress indicators
-   - Contextual success/error notifications
-   - Firebase error code mapping
-
-2. **Advanced Data Validation and Input Sanitization**
-   - Robust input validation for all forms
-   - XSS and injection protection
-   - Data sanitization before Firestore storage
-   - Custom input formatters and validators
-
-3. **Smooth UI/UX with Animations and Transitions**
-   - Custom page transitions (slide, fade, scale)
-   - Micro-interactions and button feedback
-   - Staggered list animations
-   - Loading overlays and animated cards
-
-4. **Advanced Analytics and Reporting**
-   - Interactive charts (pie, bar, line)
-   - Comprehensive attendance statistics
-   - CSV export functionality
-   - Performance tracking and trends
-   - Real-time dashboard updates
-
-5. **Performance Optimization and Memory Management**
-   - Lazy loading with pagination
-   - Automatic stream disposal
-   - Query optimization and caching
-   - Memory-efficient image loading
-   - Debounced search functionality
-
-6. **Offline Support and Data Caching**
-   - Local data persistence
-   - Offline operation queuing
-   - Automatic synchronization
-   - Connection status monitoring
-   - Conflict resolution strategies
-
-7. **Accessibility Features**
-   - Screen reader compatibility
-   - High contrast themes
-   - Large text support
-   - Keyboard navigation
-   - Semantic labels and announcements
-   - Focus management
-
-## 🔧 Technical Specifications
-
-### Dependencies
-```yaml
-dependencies:
-  flutter:
-    sdk: flutter
-  firebase_core: ^4.1.0
-  firebase_auth: ^6.0.2
-  cloud_firestore: ^6.0.1
-  mobile_scanner: ^4.0.0
-  qr_flutter: ^4.1.0
-  fl_chart: ^0.69.0
-  connectivity_plus: ^6.0.5
-  shared_preferences: ^2.3.2
-  table_calendar: ^3.0.9
-  flutter_bloc: ^9.1.1
-  hydrated_bloc: ^10.1.1
-  intl: ^0.20.2
-  rxdart: ^0.28.0
-  equatable: ^2.0.7
+attendance_unified   // read-only fallback used by offline queue
 ```
 
-### Key Services
+Notes
+- The app prefers single-field time-range queries over composite indexes.
+- We explicitly avoided collectionGroup queries in destructive paths to remove the need for manual indexes.
 
-- **ErrorHandler**: Centralized error handling with user feedback
-- **Validators**: Input validation and data sanitization
-- **AnalyticsService**: Data processing and chart generation
-- **OfflineService**: Offline functionality and synchronization
-- **AccessibilityService**: Accessibility features and preferences
-- **PerformanceUtils**: Memory management and optimization
+## Data lifecycle (create, update, delete)
 
-## 🔒 Security Notice
+- Mark attendance
+  - Writes to 4 places atomically via a batch:
+    1) attendance/{subject}/records/{recordId}
+    2) students/{email}/attendance/{recordId}
+    3) teachers/{email}/attendance/{recordId}
+    4) daily_attendance/{date}/records/{recordId}
+  - Also upserts students/{email}/subjects/{subjectCode} stats.
 
-See `SECURITY_NOTICE.md` for detailed security information including:
-- Password storage limitations
-- Production security recommendations
-- Data encryption practices
-- Privacy controls
+- Enroll/Unenroll
+  - Enroll updates both mirrors:
+    - students/{email}/subjects/{code}
+    - subject_enrollments/{code}/students/{email}
+  - student_enrollments/{email} remains a synced summary document.
 
-## 🐛 Troubleshooting
+- Cascade deletes (implemented everywhere)
+  - Teacher → “Remove student from subject”
+    - Deletes all attendance for that student in that subject from all mirrors (subject, student, teacher, daily).
+    - Updates both enrollment mirrors and the summary document.
+  - Admin → “Delete student completely”
+    - Deletes all their attendance from every mirror, removes enrollment mirrors and summary doc, removes the student document and attempts Auth deletion (see Security Notice).
+  - Admin → “Delete teacher”
+    - For each subject owned by the teacher: deletes all records + mirrors, removes rosters and student subject entries, deletes the subject and enrollment containers, then deletes teacher subcollections, document, and attempts Auth deletion.
 
-### Common Issues
+## QR sessions
 
-1. **Firebase initialization error**
-   - Ensure `google-services.json` is in the correct location
-   - Verify Firebase project configuration
+- When a teacher generates a QR, a session is saved in `qr_sessions/{subjectCode}_{yyyy-MM-dd}` with:
+  - teacherEmail, teacherName, subjectCode
+  - generatedAt, validUntil (= now + 90 minutes), isActive
+- Scanner validates session and prevents duplicates for the day.
 
-2. **QR code scanning not working**
-   - Check camera permissions
-   - Ensure device has a working camera
-   - Test on physical device (emulator cameras may not work)
+## Getting started
 
-3. **Offline sync issues**
-   - Check network connectivity
-   - Verify Firestore offline persistence is enabled
-   - Clear app cache if sync is stuck
+Clone
+```bash
+git clone https://github.com/Utsav-gajera/SmartCampus-ID.git
+cd SmartCampus-ID
+```
 
-## 🤝 Contributing
+Prerequisites
+- Flutter SDK (>= 3.3.0)
+- Firebase project with Auth + Firestore enabled
+- Android device (recommended for scanning tests)
 
-### Development Workflow
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Setup
+1) Install dependencies
+```bash
+flutter pub get
+```
+2) Firebase config
+- Place `android/app/google-services.json`
+- Place `ios/Runner/GoogleService-Info.plist` (when building iOS)
+- Ensure `lib/firebase_options.dart` matches your Firebase project (flutterfire configure or your generated file)
+3) Run
+```bash
+flutter run -d <device-id>
+```
 
-### Code Standards
-- Follow Flutter/Dart style guide
-- Add comprehensive documentation
-- Include unit tests for new features
-- Ensure accessibility compliance
-- Maintain performance standards
+Notes
+- Android package: `com.example.smartcampusid`
+- iOS bundle id: `com.example.smartcampusid`
+- If you change these IDs, add new apps in Firebase and replace both config files accordingly.
 
-## 📄 License
+## Troubleshooting
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- Android Gradle Plugin / Kotlin warnings
+  - The project is configured with AGP 8.6.0 and Kotlin 2.1.0 to avoid toolchain deprecation warnings.
+- Lost debug connection on physical device
+  - This can happen due to USB/power policies. The app normally remains running on the device even if the debug bridge disconnects.
+- Index errors
+  - The code avoids collectionGroup queries in write/delete paths; normal operations should not require custom indexes.
+
+## Security
+
+- For development, a temporary `authPassword` may be stored to enable full account deletion from the client. This is NOT recommended for production. See `SECURITY_NOTICE.md` for Admin SDK / Cloud Function alternatives.
+
+## Tech stack
+
+- Flutter, Firebase Auth, Cloud Firestore, mobile_scanner, qr_flutter, fl_chart, table_calendar, connectivity_plus, shared_preferences, intl
+
+## Contributing
+
+- Follow Dart style, document features, and keep the data model in sync with this README.
+
+## License
+
+- If you intend to publish, add a proper LICENSE file (MIT, Apache-2.0, etc.).
 
 ---
 
-Built with ❤️ using Flutter and Firebase  
-**Version**: 2.0.0  
-**Last Updated**: December 2024
+## Developer commands
+
+Common commands you'll use during development:
+
+```bash
+# Install dependencies
+flutter pub get
+
+# Run on a specific device
+flutter devices
+flutter run -d <device-id>
+
+# Clean and re-get packages
+flutter clean
+flutter pub get
+
+# Build release artifacts
+flutter build apk
+flutter build appbundle
+
+# Analyze code
+flutter analyze
+
+# Run tests (if/when present)
+flutter test
+```
+
+## Detailed security notice (client-side deletion)
+
+For development only, the app may store an `authPassword` field on user documents to enable complete deletion of Auth users from the client (because client apps cannot use the Admin SDK). Do NOT use this approach in production.
+
+Recommended production approach (Cloud Functions with Admin SDK):
+
+```js
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+
+exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
+  // TODO: enforce admin-only access (e.g., custom claims)
+  const uid = data.uid;
+  await admin.auth().deleteUser(uid);
+  return { ok: true };
+});
+```
+
+Also prefer disabling accounts or moving deletion to a secure backend that you control.
+
+---
+Built with ❤️ using Flutter and Firebase. Last updated: September 2025.

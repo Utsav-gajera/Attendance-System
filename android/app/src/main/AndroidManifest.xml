@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.attendance_system">
+    package="com.example.smartcampusid">
 
     <!-- Camera permissions for QR scanner -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -8,7 +8,7 @@
 
     <application
         android:name=".FlutterMultiDexApplication"
-        android:label="attendance_system"
+        android:label="SmartCampus ID"
         android:icon="@mipmap/ic_launcher">
 
         <activity
